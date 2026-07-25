@@ -28,13 +28,32 @@ Stalk cruise buttons (`GRA_Neu`) are not mapped for UP yet. Engage via stock CC 
 - Wheel speeds from `Bremse_3` when present; `vEgo` always from `Bremse_1`.
 - Follow-up: [pq-flasher](https://github.com/pd0wm/pq-flasher) if the 6‑minute timer is unacceptable.
 
+## GRA_Neu survey
+
+```bash
+cd /data/openpilot
+PYTHONPATH=/data/openpilot /usr/local/venv/bin/python3 scripts/vw_up_gra_neu_survey.py
+```
+
+Run with **ignition on in the car**. Do not change `volkswagen_pq.h` based on a bench/off-car result.
+
+- If GRA_Neu is seen: no safety RX change.
+- If not seen with car awake: make `0x38A` optional/ignored in PQ safety RX for UP, then rebuild/flash panda as required.
+
+Bench result (device not in car): NOT seen — expected; safety unchanged pending in-car run.
+
+## Device params (already set on this C3)
+
+- `Mads=1`
+- `MadsMainCruiseAllowed=1`
+- `MadsUnifiedEngagementMode=0`
+
 ## First-drive checklist
 
-See `scripts/vw_up_gra_neu_survey.py` for GRA_Neu `0x38A` presence (panda RX check dependency).
-
 1. Fingerprint `VOLKSWAGEN_UP_MK1`
-2. `Lenkhilfe_2.LH2_Sta_HCA` reaches READY (not stuck DISABLED/FAULT)
-3. Set stock CC; confirm no panda block of `HCA_1`
-4. MADS on; confirm `latActive` and non-zero `HCA_1` torque
-5. EPS ACTIVE and wheel response
-6. Note 6‑minute timer behavior
+2. Re-run GRA_Neu survey with ignition on; apply safety change only if still missing
+3. `Lenkhilfe_2.LH2_Sta_HCA` reaches READY (not stuck DISABLED/FAULT)
+4. Set stock CC; confirm no panda block of `HCA_1`
+5. MADS on; confirm `latActive` and non-zero `HCA_1` torque
+6. EPS ACTIVE and wheel response
+7. Note 6‑minute timer behavior
