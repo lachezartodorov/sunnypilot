@@ -76,53 +76,55 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_eps_update(self.packer_pt, self.CAN.cam, CS.eps_stock_values, ea_simulated_torque))
 
     # **** Acceleration Controls ******************************************** #
+    # UP! / PQ bring-up: ACC accel / HUD / stock buttons not used on PQ (ported from sp_master_up)
 
-    if self.CP.openpilotLongitudinalControl:
-      if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
-        stopping = actuators.longControlState == LongCtrlState.stopping
-        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
-                                                           acc_control, stopping, starting, CS.esp_hold_confirmation))
+    if not (self.CP.flags & VolkswagenFlags.PQ):
+      if self.CP.openpilotLongitudinalControl:
+        if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
+          acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
+          accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
+          stopping = actuators.longControlState == LongCtrlState.stopping
+          starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
+          can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
+                                                             acc_control, stopping, starting, CS.esp_hold_confirmation))
 
-      #if self.aeb_available:
-      #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
-      #    can_sends.append(self.CCS.create_aeb_control(self.packer_pt, False, False, 0.0))
-      #  if self.frame % self.CCP.AEB_HUD_STEP == 0:
-      #    can_sends.append(self.CCS.create_aeb_hud(self.packer_pt, False, False))
+        #if self.aeb_available:
+        #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
+        #    can_sends.append(self.CCS.create_aeb_control(self.packer_pt, False, False, 0.0))
+        #  if self.frame % self.CCP.AEB_HUD_STEP == 0:
+        #    can_sends.append(self.CCS.create_aeb_hud(self.packer_pt, False, False))
 
-    # **** HUD Controls ***************************************************** #
+      # **** HUD Controls ***************************************************** #
 
-    if self.frame % self.CCP.LDW_STEP == 0:
-      hud_alert = 0
-      if hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw):
-        hud_alert = self.CCP.LDW_MESSAGES["laneAssistTakeOver"]
-      can_sends.append(self.CCS.create_lka_hud_control(self.packer_pt, self.CAN.pt, CS.ldw_stock_values, CC.latActive,
-                                                       CS.out.steeringPressed, hud_alert, hud_control))
+      if self.frame % self.CCP.LDW_STEP == 0:
+        hud_alert = 0
+        if hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw):
+          hud_alert = self.CCP.LDW_MESSAGES["laneAssistTakeOver"]
+        can_sends.append(self.CCS.create_lka_hud_control(self.packer_pt, self.CAN.pt, CS.ldw_stock_values, CC.latActive,
+                                                         CS.out.steeringPressed, hud_alert, hud_control))
 
-    if self.frame % self.CCP.ACC_HUD_STEP == 0 and self.CP.openpilotLongitudinalControl:
-      lead_distance = 0
-      if hud_control.leadVisible and self.frame * DT_CTRL > 1.0:  # Don't display lead until we know the scaling factor
-        lead_distance = 512 if CS.upscale_lead_car_signal else 8
-      acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-      # FIXME: PQ may need to use the on-the-wire mph/kmh toggle to fix rounding errors
-      # FIXME: Detect clusters with vEgoCluster offsets and apply an identical vCruiseCluster offset
-      set_speed = hud_control.setSpeed * CV.MS_TO_KPH
-      can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed,
-                                                       lead_distance, hud_control.leadDistanceBars))
+      if self.frame % self.CCP.ACC_HUD_STEP == 0 and self.CP.openpilotLongitudinalControl:
+        lead_distance = 0
+        if hud_control.leadVisible and self.frame * DT_CTRL > 1.0:  # Don't display lead until we know the scaling factor
+          lead_distance = 512 if CS.upscale_lead_car_signal else 8
+        acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
+        # FIXME: PQ may need to use the on-the-wire mph/kmh toggle to fix rounding errors
+        # FIXME: Detect clusters with vEgoCluster offsets and apply an identical vCruiseCluster offset
+        set_speed = hud_control.setSpeed * CV.MS_TO_KPH
+        can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed,
+                                                         lead_distance, hud_control.leadDistanceBars))
 
-    # **** Stock ACC Button Controls **************************************** #
+      # **** Stock ACC Button Controls **************************************** #
 
-    gra_send_ready = self.CP.pcmCruise and CS.gra_stock_values["COUNTER"] != self.gra_acc_counter_last
-    if gra_send_ready and (CC.cruiseControl.cancel or CC.cruiseControl.resume):
-      can_sends.append(self.CCS.create_acc_buttons_control(self.packer_pt, self.CAN.ext, CS.gra_stock_values,
-                                                           cancel=CC.cruiseControl.cancel, resume=CC.cruiseControl.resume))
+      gra_send_ready = self.CP.pcmCruise and CS.gra_stock_values["COUNTER"] != self.gra_acc_counter_last
+      if gra_send_ready and (CC.cruiseControl.cancel or CC.cruiseControl.resume):
+        can_sends.append(self.CCS.create_acc_buttons_control(self.packer_pt, self.CAN.ext, CS.gra_stock_values,
+                                                             cancel=CC.cruiseControl.cancel, resume=CC.cruiseControl.resume))
+      self.gra_acc_counter_last = CS.gra_stock_values["COUNTER"]
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.apply_torque_last / self.CCP.STEER_MAX
     new_actuators.torqueOutputCan = self.apply_torque_last
 
-    self.gra_acc_counter_last = CS.gra_stock_values["COUNTER"]
     self.frame += 1
     return new_actuators, can_sends

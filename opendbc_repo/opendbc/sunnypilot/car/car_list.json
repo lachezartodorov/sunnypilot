@@ -4116,5 +4116,13 @@
       "2023"
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen UP! 1ST GEN": {
+    "platform": "VOLKSWAGEN_UP_MK1",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "UP!",
+    "year": [],
+    "package": "Lane Assist"
   }
 }
