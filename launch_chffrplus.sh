@@ -74,6 +74,11 @@ function launch {
     agnos_init
   fi
 
+  # optional remote access — never block openpilot boot
+  if [ -x "$DIR/scripts/start_tailscale.sh" ]; then
+    "$DIR/scripts/start_tailscale.sh" || true
+  fi
+
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1000 > /tmp/launch_log
 
