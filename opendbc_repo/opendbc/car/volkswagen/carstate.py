@@ -2,7 +2,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.volkswagen.values import DBC, CanBus, NetworkLocation, TransmissionType, GearShifter, \
+from opendbc.car.volkswagen.values import DBC, CAR, CanBus, NetworkLocation, TransmissionType, GearShifter, \
                                                       CarControllerParams, VolkswagenFlags
 
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -167,22 +167,25 @@ class CarState(CarStateBase):
     ret.parkingBrake = bool(pt_cp.vl["Kombi_1"]["Bremsinfo"])
 
     # Update gear and/or clutch position data.
-    # UP! bring-up: gear signals unreliable / unused — force drive
-    #if self.CP.transmissionType == TransmissionType.automatic:
-    #  ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Getriebe_1"]["Waehlhebelposition__Getriebe_1_"], None))
-    #elif self.CP.transmissionType == TransmissionType.manual:
-    #  reverse_light = bool(pt_cp.vl["Gate_Komf_1"]["GK1_Rueckfahr"])
-    #  if reverse_light:
-    #    ret.gearShifter = GearShifter.reverse
-    #  else:
-    #    ret.gearShifter = GearShifter.drive
-    ret.gearShifter = GearShifter.drive
+    if self.CP.transmissionType == TransmissionType.automatic:
+      ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Getriebe_1"]["Waehlhebelposition__Getriebe_1_"], None))
+    elif self.CP.transmissionType == TransmissionType.manual:
+      reverse_light = bool(pt_cp.vl["Gate_Komf_1"]["GK1_Rueckfahr"])
+      if reverse_light:
+        ret.gearShifter = GearShifter.reverse
+      else:
+        ret.gearShifter = GearShifter.drive
 
-    # UP! Missing wheel speeds (Bremse_3). Testing hack from sp_master_up.
-    ret.wheelSpeeds.fl = 16.6
-    ret.wheelSpeeds.fr = 16.6
-    ret.wheelSpeeds.rl = 16.6
-    ret.wheelSpeeds.rr = 16.6
+    # Wheel speeds from Bremse_3 when present (absent on some PQ/NSF; vEgo still from Bremse_1)
+    _ = pt_cp.vl["Bremse_3"]  # register message with CANParser
+    bremse_3_addr = pt_cp.dbc.name_to_msg["Bremse_3"].address
+    if pt_cp.message_states[bremse_3_addr].timestamps:
+      self.parse_wheel_speeds(ret,
+        pt_cp.vl["Bremse_3"]["Radgeschw__VL_4_1"],
+        pt_cp.vl["Bremse_3"]["Radgeschw__VR_4_1"],
+        pt_cp.vl["Bremse_3"]["Radgeschw__HL_4_1"],
+        pt_cp.vl["Bremse_3"]["Radgeschw__HR_4_1"],
+      )
 
     # Update door and trunk/hatch lid open status.
     ret.doorOpen = any([pt_cp.vl["Gate_Komf_1"]["GK1_Fa_Tuerkont"],
@@ -196,10 +199,10 @@ class CarState(CarStateBase):
 
     # Consume blind-spot monitoring info/warning LED states, if available.
     # Infostufe: BSM LED on, Warnung: BSM LED flashing
-    # UP! bring-up: SWA_1 not used
-    #if self.CP.enableBsm:
-    #  ret.leftBlindspot = bool(ext_cp.vl["SWA_1"]["SWA_Infostufe_SWA_li"]) or bool(ext_cp.vl["SWA_1"]["SWA_Warnung_SWA_li"])
-    #  ret.rightBlindspot = bool(ext_cp.vl["SWA_1"]["SWA_Infostufe_SWA_re"]) or bool(ext_cp.vl["SWA_1"]["SWA_Warnung_SWA_re"])
+    # UP!: no SWA_1 on comfort/ADAS path used by openpilot
+    if self.CP.enableBsm and self.CP.carFingerprint != CAR.VOLKSWAGEN_UP_MK1:
+      ret.leftBlindspot = bool(ext_cp.vl["SWA_1"]["SWA_Infostufe_SWA_li"]) or bool(ext_cp.vl["SWA_1"]["SWA_Warnung_SWA_li"])
+      ret.rightBlindspot = bool(ext_cp.vl["SWA_1"]["SWA_Infostufe_SWA_re"]) or bool(ext_cp.vl["SWA_1"]["SWA_Warnung_SWA_re"])
 
     # Consume factory LDW data relevant for factory SWA (Lane Change Assist)
     # and capture it for forwarding to the blind spot radar controller
@@ -215,21 +218,27 @@ class CarState(CarStateBase):
     ret.stockFcw = False
     ret.stockAeb = False
 
-    # Update ACC radar status.
-    # UP! bring-up: no ACC radar / GRA_Neu; use Motor_2 cruise status
-    self.acc_type = 0
-    #ret.cruiseState.available = bool(pt_cp.vl["Motor_5"]["GRA_Hauptschalter"])
-    ret.cruiseState.enabled = True if pt_cp.vl["Motor_2"]["GRA_Status"] in [1, 2] else False
-    ret.cruiseState.available = ret.cruiseState.enabled  # TEST hack for UP!
-    #if self.CP.pcmCruise:
-    #  ret.accFaulted = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_StaACC"] in (6, 7)
-    #else:
-    #  ret.accFaulted = pt_cp.vl["Motor_2"]["GRA_Status"] == 3
+    # Update ACC / cruise status.
+    # UP!: no ACC radar / GRA_Neu — use Motor_2 for panda pcm_cruise_check + MADS engage edge
+    if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+      self.acc_type = 0
+      ret.cruiseState.enabled = pt_cp.vl["Motor_2"]["GRA_Status"] in (1, 2)
+      ret.cruiseState.available = ret.cruiseState.enabled
+      ret.cruiseState.speed = pt_cp.vl["Motor_2"]["Soll_Geschwindigkeit_bei_GRA_Be"] * CV.KPH_TO_MS
+      self.gra_stock_values = pt_cp.vl["Motor_2"]
+    else:
+      self.acc_type = ext_cp.vl["ACC_System"]["ACS_Typ_ACC"]
+      ret.cruiseState.available = bool(pt_cp.vl["Motor_5"]["GRA_Hauptschalter"])
+      ret.cruiseState.enabled = pt_cp.vl["Motor_2"]["GRA_Status"] in (1, 2)
+      if self.CP.pcmCruise:
+        ret.accFaulted = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_StaACC"] in (6, 7)
+      else:
+        ret.accFaulted = pt_cp.vl["Motor_2"]["GRA_Status"] == 3
+      # Update ACC setpoint. When the setpoint reads as 255, the driver has not
+      # yet established an ACC setpoint, so treat it as zero.
+      ret.cruiseState.speed = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_V_Wunsch"] * CV.KPH_TO_MS
+      self.gra_stock_values = pt_cp.vl["GRA_Neu"]
 
-    # Update ACC setpoint. When the setpoint reads as 255, the driver has not
-    # yet established an ACC setpoint, so treat it as zero.
-    # FIXME: for now this is the CC setpoint, the radar setpoint is in ACC_GRA_Anzeige.ACA_V_Wunsch
-    ret.cruiseState.speed = pt_cp.vl["Motor_2"]["Soll_Geschwindigkeit_bei_GRA_Be"] * CV.KPH_TO_MS
     if ret.cruiseState.speed > 70:  # 255 kph in m/s == no current setpoint
       ret.cruiseState.speed = 0
 
@@ -237,8 +246,6 @@ class CarState(CarStateBase):
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(300, pt_cp.vl["Gate_Komf_1"]["GK1_Blinker_li"],
                                                                             pt_cp.vl["Gate_Komf_1"]["GK1_Blinker_re"])
     ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
-    # UP! bring-up: GRA_Neu absent; Motor_2 has no COUNTER — stock button passthrough disabled in carcontroller
-    self.gra_stock_values = pt_cp.vl["Motor_2"]
 
     # Additional safety checks performed in CarInterface.
     ret.espDisabled = bool(pt_cp.vl["Bremse_1"]["ESP_Passiv_getastet"])

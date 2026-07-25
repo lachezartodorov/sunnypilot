@@ -19,25 +19,24 @@ class CarInterface(CarInterfaceBase):
       safety_configs = [get_safety_config(structs.CarParams.SafetyModel.volkswagenPq)]
       ret.enableBsm = 0x3BA in fingerprint[0]  # SWA_1
 
-      # UP! bring-up: force manual (no Getriebe_1 / auto detection for UP!)
-      #if 0x440 in fingerprint[0] or docs:  # Getriebe_1
-      #  ret.transmissionType = TransmissionType.automatic
-      #else:
-      ret.transmissionType = TransmissionType.manual
+      if candidate == CAR.VOLKSWAGEN_UP_MK1:
+        # UP!: no Getriebe_1 — treat as manual for reverse-light gear
+        ret.transmissionType = TransmissionType.manual
+      elif 0x440 in fingerprint[0] or docs:  # Getriebe_1
+        ret.transmissionType = TransmissionType.automatic
+      else:
+        ret.transmissionType = TransmissionType.manual
 
       if any(msg in fingerprint[1] for msg in (0x1A0, 0xC2)):  # Bremse_1, Lenkwinkel_1
         ret.networkLocation = NetworkLocation.gateway
       else:
         ret.networkLocation = NetworkLocation.fwdCamera
 
-      # The PQ port is in dashcam-only mode due to a fixed six-minute maximum timer on HCA steering. An unsupported
-      # EPS flash update to work around this timer, and enable steering down to zero, is available from:
-      #   https://github.com/pd0wm/pq-flasher
-      # It is documented in a four-part blog series:
-      #   https://blog.willemmelching.nl/carhacking/2022/01/02/vw-part1/
-      # Panda ALLOW_DEBUG firmware required.
-      # UP! bring-up: allow control (was dashcamOnly)
-      #ret.dashcamOnly = True
+      # The PQ port is normally dashcam-only due to a fixed six-minute maximum timer on HCA steering.
+      # EPS flash workaround: https://github.com/pd0wm/pq-flasher
+      # UP! / MADS lateral: allow control on stock EPS (accept ~6 min HCA timer).
+      if candidate != CAR.VOLKSWAGEN_UP_MK1:
+        ret.dashcamOnly = True
 
     else:
       # Set global MQB parameters

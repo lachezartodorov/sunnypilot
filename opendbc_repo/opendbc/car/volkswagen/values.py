@@ -84,15 +84,18 @@ class CarControllerParams:
         self.shifter_values = can_define.dv["Getriebe_1"]["Waehlhebelposition__Getriebe_1_"]
       self.hca_status_values = can_define.dv["Lenkhilfe_2"]["LH2_Sta_HCA"]
 
-      # UP! bring-up: GRA_Neu buttons not used / not present as on other PQ cars
-      self.BUTTONS = [
-        #Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_Neu", "GRA_Neu_Setzen", [1]),
-        #Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_Neu", "GRA_Recall", [1]),
-        #Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
-        #Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
-        #Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
-        #Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [1]),
-      ]
+      # UP!: no GRA_Neu stalk map yet — MADS engages via Motor_2 cruise available edge
+      if CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+        self.BUTTONS = []
+      else:
+        self.BUTTONS = [
+          Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_Neu", "GRA_Neu_Setzen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_Neu", "GRA_Recall", [1]),
+          Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
+          Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
+          Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [1]),
+        ]
 
       self.LDW_MESSAGES = {
         "none": 0,  # Nothing to display

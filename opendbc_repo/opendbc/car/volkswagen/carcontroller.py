@@ -76,7 +76,7 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_eps_update(self.packer_pt, self.CAN.cam, CS.eps_stock_values, ea_simulated_torque))
 
     # **** Acceleration Controls ******************************************** #
-    # UP! / PQ bring-up: ACC accel / HUD / stock buttons not used on PQ (ported from sp_master_up)
+    # PQ / UP MADS lateral: no ACC accel / HUD / stock GRA button TX on PQ
 
     if not (self.CP.flags & VolkswagenFlags.PQ):
       if self.CP.openpilotLongitudinalControl:
