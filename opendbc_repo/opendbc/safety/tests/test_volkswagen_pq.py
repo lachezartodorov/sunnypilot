@@ -145,6 +145,12 @@ class TestVolkswagenPqUpSafety(TestVolkswagenPqSafetyBase):
     self.safety.set_controls_allowed(1)
     self.assertTrue(self._tx(self._torque_cmd_msg(self.MAX_RATE_UP, steer_req=1, hca_status=5)))
 
+  def test_main_switch_updates_mads_state(self):
+    self._rx(self._motor_5_msg(main_switch=True))
+    self.assertTrue(self.safety.get_acc_main_on())
+    self._rx(self._motor_5_msg(main_switch=False))
+    self.assertFalse(self.safety.get_acc_main_on())
+
 
 class TestVolkswagenPqLongSafety(TestVolkswagenPqSafetyBase, common.LongitudinalAccelSafetyTest):
   TX_MSGS = [[MSG_HCA_1, 0], [MSG_LDW_1, 0], [MSG_ACC_SYSTEM, 0], [MSG_ACC_GRA_ANZEIGE, 0]]

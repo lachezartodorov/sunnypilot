@@ -14,6 +14,8 @@
 #define MSG_ACC_GRA_ANZEIGE     0x56AU   // TX by OP, ACC HUD
 #define MSG_LDW_1               0x5BEU   // TX by OP, Lane line recognition and text alerts
 
+static bool volkswagen_pq_up = false;
+
 static uint32_t volkswagen_pq_get_checksum(const CANPacket_t *msg) {
   return (uint32_t)msg->data[(msg->addr == MSG_MOTOR_5) ? 7 : 0];
 }
@@ -79,7 +81,7 @@ static safety_config volkswagen_pq_init(uint16_t param) {
 
   volkswagen_common_init();
 
-  bool volkswagen_pq_up = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP);
+  volkswagen_pq_up = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP);
 
 #ifdef ALLOW_DEBUG
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
@@ -110,6 +112,12 @@ static void volkswagen_pq_rx_hook(const CANPacket_t *msg) {
         torque_driver_new *= -1;
       }
       update_sample(&torque_driver, torque_driver_new);
+    }
+
+    // The e-Up exposes its cruise main switch on Motor_5. MADS uses this
+    // independently of Motor_2's active set-speed status for lateral control.
+    if (volkswagen_pq_up && (msg->addr == MSG_MOTOR_5)) {
+      acc_main_on = GET_BIT(msg, 50U);
     }
 
     if (volkswagen_longitudinal) {

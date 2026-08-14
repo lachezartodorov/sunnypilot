@@ -204,10 +204,11 @@ class CarState(CarStateBase):
 
     if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
       # The e-Up has no ACC radar or GRA_Neu. Stock cruise state in Motor_2 is
-      # also the panda safety engagement source for lateral-only control.
+      # the active set-speed state; Motor_5 carries the main-switch state used
+      # to toggle MADS lateral control.
       self.acc_type = 0
       ret.cruiseState.enabled = pt_cp.vl["Motor_2"]["MO2_Sta_GRA"] in (1, 2)
-      ret.cruiseState.available = ret.cruiseState.enabled
+      ret.cruiseState.available = bool(pt_cp.vl["Motor_5"]["MO5_GRA_Hauptsch"])
       ret.cruiseState.speed = pt_cp.vl["Motor_2"]["MO2_GRA_Soll"] * CV.KPH_TO_MS
       ret.accFaulted = False
     else:
