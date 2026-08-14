@@ -21,7 +21,11 @@ class CarInterface(CarInterfaceBase):
       safety_configs = [get_safety_config(structs.CarParams.SafetyModel.volkswagenPq)]
       ret.enableBsm = 0x3BA in fingerprint[0]  # SWA_1
 
-      if 0x440 in fingerprint[0] or docs:  # Getriebe_1
+      if candidate == CAR.VOLKSWAGEN_UP_MK1:
+        # No Getriebe_1; use the reverse-light signal as for a manual transmission.
+        ret.transmissionType = TransmissionType.manual
+        safety_configs[0].safetyParam |= VolkswagenSafetyFlags.PQ_UP.value
+      elif 0x440 in fingerprint[0] or docs:  # Getriebe_1
         ret.transmissionType = TransmissionType.automatic
       else:
         ret.transmissionType = TransmissionType.manual
@@ -31,7 +35,8 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.networkLocation = NetworkLocation.fwdCamera
 
-      ret.dashcamOnly = is_release  # Release support needs HCA timeout fix, safety validation
+      # The e-Up is enabled for an explicit stock-EPS test port. Other PQ cars retain release gating.
+      ret.dashcamOnly = is_release and candidate != CAR.VOLKSWAGEN_UP_MK1
 
     elif ret.flags & VolkswagenFlags.MLB:
       # Set global MLB parameters
@@ -78,8 +83,8 @@ class CarInterface(CarInterfaceBase):
 
     # Global longitudinal tuning defaults, can be overridden per-vehicle
 
-    ret.alphaLongitudinalAvailable = ret.networkLocation == NetworkLocation.gateway or docs
-    if alpha_long:
+    ret.alphaLongitudinalAvailable = candidate != CAR.VOLKSWAGEN_UP_MK1 and (ret.networkLocation == NetworkLocation.gateway or docs)
+    if alpha_long and ret.alphaLongitudinalAvailable:
       # Proof-of-concept, prep for E2E only. No radar points available. Panda ALLOW_DEBUG firmware required.
       ret.openpilotLongitudinalControl = True
       safety_configs[0].safetyParam |= VolkswagenSafetyFlags.LONG_CONTROL.value

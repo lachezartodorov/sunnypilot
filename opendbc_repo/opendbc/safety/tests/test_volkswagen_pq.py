@@ -130,6 +130,22 @@ class TestVolkswagenPqStockSafety(TestVolkswagenPqSafetyBase):
     self.assertTrue(self._tx(self._button_msg(resume=True)))
 
 
+class TestVolkswagenPqUpSafety(TestVolkswagenPqSafetyBase):
+  TX_MSGS = [[MSG_HCA_1, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [MSG_HCA_1]}
+  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_1,)}
+
+  def setUp(self):
+    self.packer = CANPackerSafety("vw_pq")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, VolkswagenSafetyFlags.PQ_UP)
+    self.safety.init_tests()
+
+  def test_stock_hca_status(self):
+    self.safety.set_controls_allowed(1)
+    self.assertTrue(self._tx(self._torque_cmd_msg(self.MAX_RATE_UP, steer_req=1, hca_status=5)))
+
+
 class TestVolkswagenPqLongSafety(TestVolkswagenPqSafetyBase, common.LongitudinalAccelSafetyTest):
   TX_MSGS = [[MSG_HCA_1, 0], [MSG_LDW_1, 0], [MSG_ACC_SYSTEM, 0], [MSG_ACC_GRA_ANZEIGE, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [MSG_HCA_1, MSG_LDW_1, MSG_ACC_SYSTEM, MSG_ACC_GRA_ANZEIGE]}

@@ -5,7 +5,7 @@ from opendbc.car.lateral import apply_driver_steer_torque_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.volkswagen import mlbcan, mqbcan, pqcan
-from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
+from opendbc.car.volkswagen.values import CAR, CanBus, CarControllerParams, VolkswagenFlags
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -68,7 +68,11 @@ class CarController(CarControllerBase):
       apply_torque = self.hca_mitigation.update(apply_torque, self.apply_torque_last)
       hca_enabled = apply_torque != 0
       self.apply_torque_last = apply_torque
-      can_sends.append(self.CCS.create_steering_control(self.packer_pt, self.CAN.pt, apply_torque, hca_enabled))
+      if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+        # Stock e-Up HCA_1 uses status 5 while torque is active (3 while ready).
+        can_sends.append(self.CCS.create_steering_control(self.packer_pt, self.CAN.pt, apply_torque, hca_enabled, active_status=5))
+      else:
+        can_sends.append(self.CCS.create_steering_control(self.packer_pt, self.CAN.pt, apply_torque, hca_enabled))
 
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT:
         # Pacify VW Emergency Assist driver inactivity detection by changing its view of driver steering input torque
@@ -98,7 +102,7 @@ class CarController(CarControllerBase):
 
     # **** HUD Controls ***************************************************** #
 
-    if self.frame % self.CCP.LDW_STEP == 0:
+    if self.frame % self.CCP.LDW_STEP == 0 and self.CP.carFingerprint != CAR.VOLKSWAGEN_UP_MK1:
       hud_alert = 0
       if hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw):
         hud_alert = self.CCP.LDW_MESSAGES["laneAssistTakeOver"]
@@ -118,7 +122,8 @@ class CarController(CarControllerBase):
 
     # **** Stock ACC Button Controls **************************************** #
 
-    gra_send_ready = self.CP.pcmCruise and CS.gra_stock_values["COUNTER"] != self.gra_acc_counter_last
+    gra_send_ready = (self.CP.carFingerprint != CAR.VOLKSWAGEN_UP_MK1 and self.CP.pcmCruise and
+                      CS.gra_stock_values["COUNTER"] != self.gra_acc_counter_last)
     if gra_send_ready and (CC.cruiseControl.cancel or CC.cruiseControl.resume):
       can_sends.append(self.CCS.create_acc_buttons_control(self.packer_pt, self.CAN.ext, CS.gra_stock_values,
                                                            cancel=CC.cruiseControl.cancel, resume=CC.cruiseControl.resume))
@@ -127,6 +132,7 @@ class CarController(CarControllerBase):
     new_actuators.torque = self.apply_torque_last / self.CCP.STEER_MAX
     new_actuators.torqueOutputCan = self.apply_torque_last
 
-    self.gra_acc_counter_last = CS.gra_stock_values["COUNTER"]
+    if self.CP.carFingerprint != CAR.VOLKSWAGEN_UP_MK1:
+      self.gra_acc_counter_last = CS.gra_stock_values["COUNTER"]
     self.frame += 1
     return new_actuators, can_sends

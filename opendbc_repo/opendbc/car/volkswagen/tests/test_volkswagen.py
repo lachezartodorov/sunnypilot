@@ -54,7 +54,7 @@ class TestVolkswagenPlatformConfigs(unittest.TestCase):
                            f"Shared chassis codes: {comp}"
 
   def test_custom_fuzzy_fingerprinting(self):
-    all_radar_fw = list({fw for ecus in FW_VERSIONS.values() for fw in ecus[Ecu.fwdRadar, 0x757, None]})
+    all_radar_fw = list({fw for ecus in FW_VERSIONS.values() for fw in ecus.get((Ecu.fwdRadar, 0x757, None), [])})
 
     for platform in CAR:
       with self.subTest(platform=platform.name):
@@ -67,7 +67,8 @@ class TestVolkswagenPlatformConfigs(unittest.TestCase):
 
             # Check a few FW cases - expected, unexpected
             for radar_fw in random.sample(all_radar_fw, 5) + [b'\xf1\x875Q0907572G \xf1\x890571', b'\xf1\x877H9907572AA\xf1\x890396']:
-              should_match = ((wmi in platform.config.wmis and chassis_code in platform.config.chassis_codes) and
+              platform_has_radar = (Ecu.fwdRadar, 0x757, None) in FW_VERSIONS[platform]
+              should_match = (platform_has_radar and (wmi in platform.config.wmis and chassis_code in platform.config.chassis_codes) and
                               radar_fw in all_radar_fw)
 
               live_fws = {(0x757, None): [radar_fw]}

@@ -54,6 +54,10 @@ static safety_config volkswagen_pq_init(uint16_t param) {
   static const CanMsg VOLKSWAGEN_PQ_LONG_TX_MSGS[] =  {{MSG_HCA_1, 0, 5, .check_relay = true}, {MSG_LDW_1, 0, 8, .check_relay = true},
                                                 {MSG_ACC_SYSTEM, 0, 8, .check_relay = true}, {MSG_ACC_GRA_ANZEIGE, 0, 8, .check_relay = true}};
 
+  // The e-Up camera sends a 5-byte LDW_Status, unlike the 8-byte generic PQ
+  // definition. Preserve and forward that stock message; replace only HCA_1.
+  static const CanMsg VOLKSWAGEN_PQ_UP_TX_MSGS[] = {{MSG_HCA_1, 0, 5, .check_relay = true}};
+
   static RxCheck volkswagen_pq_rx_checks[] = {
     {.msg = {{MSG_LENKHILFE_3, 0, 6, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_BREMSE_1, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -63,13 +67,26 @@ static safety_config volkswagen_pq_init(uint16_t param) {
     {.msg = {{MSG_GRA_NEU, 0, 4, 30U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
   };
 
+  // GRA_Neu is absent on the e-Up. Motor_2 remains checked and is the stock
+  // cruise engagement source used by pcm_cruise_check().
+  static RxCheck volkswagen_pq_up_rx_checks[] = {
+    {.msg = {{MSG_LENKHILFE_3, 0, 6, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_BREMSE_1, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_2, 0, 8, 50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_3, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_5, 0, 8, 50U, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+  };
+
   volkswagen_common_init();
+
+  bool volkswagen_pq_up = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP);
 
 #ifdef ALLOW_DEBUG
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
-#else
-  SAFETY_UNUSED(param);
 #endif
+  if (volkswagen_pq_up) {
+    return BUILD_SAFETY_CFG(volkswagen_pq_up_rx_checks, VOLKSWAGEN_PQ_UP_TX_MSGS);
+  }
   return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_pq_rx_checks, VOLKSWAGEN_PQ_LONG_TX_MSGS) : \
                                    BUILD_SAFETY_CFG(volkswagen_pq_rx_checks, VOLKSWAGEN_PQ_STOCK_TX_MSGS);
 }

@@ -8,9 +8,11 @@ from opendbc.car.vehicle_model import VehicleModel
 from openpilot.common.realtime import DT_CTRL, Ratekeeper
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from opendbc.car.volkswagen.values import CAR
 
 LongCtrlState = car.CarControl.Actuators.LongControlState
 MAX_LAT_ACCEL = 3.0
+EUP_TEST_STEER_SCALE = 0.10
 
 
 def joystickd_thread():
@@ -54,7 +56,8 @@ def joystickd_thread():
       max_curvature = MAX_LAT_ACCEL / max(sm['carState'].vEgo ** 2, 5)
       max_angle = math.degrees(VM.get_steer_from_curvature(max_curvature, sm['carState'].vEgo, sm['liveParameters'].roll))
 
-      actuators.torque = float(np.clip(joystick_axes[1], -1, 1))
+      steer_scale = EUP_TEST_STEER_SCALE if CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1 else 1.0
+      actuators.torque = float(np.clip(joystick_axes[1], -1, 1)) * steer_scale
       actuators.steeringAngleDeg, actuators.curvature = actuators.torque * max_angle, actuators.torque * -max_curvature
 
     pm.send('carControl', cc_msg)

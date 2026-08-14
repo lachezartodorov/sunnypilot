@@ -2,7 +2,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.volkswagen.values import DBC, CanBus, NetworkLocation, TransmissionType, GearShifter, \
+from opendbc.car.volkswagen.values import DBC, CAR, CanBus, NetworkLocation, TransmissionType, GearShifter, \
                                                       CarControllerParams, VolkswagenFlags
 
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -202,18 +202,27 @@ class CarState(CarStateBase):
     ret.stockFcw = False
     ret.stockAeb = False
 
-    # Update ACC radar status.
-    self.acc_type = ext_cp.vl["ACC_System"]["ACS_Typ_ACC"]
-    ret.cruiseState.available = bool(pt_cp.vl["Motor_5"]["MO5_GRA_Hauptsch"])
-    ret.cruiseState.enabled = pt_cp.vl["Motor_2"]["MO2_Sta_GRA"] in (1, 2)
-    if self.CP.pcmCruise:
-      ret.accFaulted = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_StaACC"] in (6, 7)
+    if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+      # The e-Up has no ACC radar or GRA_Neu. Stock cruise state in Motor_2 is
+      # also the panda safety engagement source for lateral-only control.
+      self.acc_type = 0
+      ret.cruiseState.enabled = pt_cp.vl["Motor_2"]["MO2_Sta_GRA"] in (1, 2)
+      ret.cruiseState.available = ret.cruiseState.enabled
+      ret.cruiseState.speed = pt_cp.vl["Motor_2"]["MO2_GRA_Soll"] * CV.KPH_TO_MS
+      ret.accFaulted = False
     else:
-      ret.accFaulted = pt_cp.vl["Motor_2"]["MO2_Sta_GRA"] == 3
+      # Update ACC radar status.
+      self.acc_type = ext_cp.vl["ACC_System"]["ACS_Typ_ACC"]
+      ret.cruiseState.available = bool(pt_cp.vl["Motor_5"]["MO5_GRA_Hauptsch"])
+      ret.cruiseState.enabled = pt_cp.vl["Motor_2"]["MO2_Sta_GRA"] in (1, 2)
+      if self.CP.pcmCruise:
+        ret.accFaulted = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_StaACC"] in (6, 7)
+      else:
+        ret.accFaulted = pt_cp.vl["Motor_2"]["MO2_Sta_GRA"] == 3
 
-    # Update ACC setpoint. When the setpoint reads as 255, the driver has not
-    # yet established an ACC setpoint, so treat it as zero.
-    ret.cruiseState.speed = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_V_Wunsch"] * CV.KPH_TO_MS
+      # Update ACC setpoint. When the setpoint reads as 255, the driver has not
+      # yet established an ACC setpoint, so treat it as zero.
+      ret.cruiseState.speed = ext_cp.vl["ACC_GRA_Anzeige"]["ACA_V_Wunsch"] * CV.KPH_TO_MS
     if ret.cruiseState.speed > 70:  # 255 kph in m/s == no current setpoint
       ret.cruiseState.speed = 0
 
@@ -221,7 +230,7 @@ class CarState(CarStateBase):
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(300, pt_cp.vl["Gate_Komf_1"]["GK1_Blinker_li"],
                                                                             pt_cp.vl["Gate_Komf_1"]["GK1_Blinker_re"])
     ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
-    self.gra_stock_values = pt_cp.vl["GRA_Neu"]
+    self.gra_stock_values = {} if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1 else pt_cp.vl["GRA_Neu"]
 
     # Additional safety checks performed in CarInterface.
     ret.espDisabled = bool(pt_cp.vl["Bremse_1"]["BR1_ESPASR_passive"])

@@ -81,14 +81,17 @@ class CarControllerParams:
         self.shifter_values = can_define.dv["Getriebe_1"]["GE1_Wahl_Pos"]
       self.hca_status_values = can_define.dv["Lenkhilfe_2"]["LH2_Sta_HCA"]
 
-      self.BUTTONS = [
-        Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_Neu", "GRA_Neu_Setzen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_Neu", "GRA_Recall", [1]),
-        Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
-        Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
-        Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [3]),
-      ]
+      if CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+        self.BUTTONS = []
+      else:
+        self.BUTTONS = [
+          Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_Neu", "GRA_Neu_Setzen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_Neu", "GRA_Recall", [1]),
+          Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
+          Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
+          Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [3]),
+        ]
 
       self.LDW_MESSAGES = {
         "none": 0,  # Nothing to display
@@ -178,6 +181,7 @@ class WMI(StrEnum):
 
 class VolkswagenSafetyFlags(IntFlag):
   LONG_CONTROL = 1
+  PQ_UP = 2
 
 
 class VolkswagenFlags(IntFlag):
@@ -361,6 +365,12 @@ class CAR(Platforms):
     VolkswagenCarSpecs(mass=1503, wheelbase=2.80, minSteerSpeed=50 * CV.KPH_TO_MS, minEnableSpeed=20 * CV.KPH_TO_MS),
     chassis_codes={"A3"},
     wmis={WMI.VOLKSWAGEN_USA_CAR},
+  )
+  VOLKSWAGEN_UP_MK1 = VolkswagenPQPlatformConfig(
+    [VWCarDocs("Volkswagen e-Up 2020-23")],
+    VolkswagenCarSpecs(mass=1235, wheelbase=2.42),
+    chassis_codes={"AA"},
+    wmis={WMI.VOLKSWAGEN_EUROPE_CAR},
   )
   VOLKSWAGEN_POLO_MK6 = VolkswagenMQBPlatformConfig(
     [

@@ -2,6 +2,7 @@
 
 extern const uint16_t FLAG_VOLKSWAGEN_LONG_CONTROL;
 const uint16_t FLAG_VOLKSWAGEN_LONG_CONTROL = 1;
+const uint16_t FLAG_VOLKSWAGEN_PQ_UP = 2;
 
 static uint8_t volkswagen_crc8_lut_8h2f[256]; // Static lookup table for CRC8 poly 0x2F, aka 8H2F/AUTOSAR
 
