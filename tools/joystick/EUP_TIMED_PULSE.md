@@ -4,7 +4,7 @@ Start the tool while the device and car are offroad:
 
 ```sh
 cd /data/openpilot
-python3 tools/joystick/eup_timed_pulse.py --torque-percent 10 --duration 1.5
+PYTHONPATH=/data/openpilot /usr/local/venv/bin/python3 tools/joystick/eup_timed_pulse.py --torque-percent 10 --duration 1.5
 ```
 
 The default request is 10% of the normal 3 Nm controller limit. The tool has a
@@ -31,7 +31,7 @@ For interactive steering, start the separate keyboard tool while offroad:
 
 ```sh
 cd /data/openpilot
-python3 tools/joystick/eup_wasd_control.py --torque-percent 10
+PYTHONPATH=/data/openpilot /usr/local/venv/bin/python3 tools/joystick/eup_wasd_control.py --torque-percent 10
 ```
 
 After going onroad, select D or B, roll at 3-8 km/h, release the brake, and turn
