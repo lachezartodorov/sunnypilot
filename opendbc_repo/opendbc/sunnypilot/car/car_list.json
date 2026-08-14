@@ -4316,16 +4316,13 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
-  "Volkswagen e-Up 2020-23": {
+  "Volkswagen e-Up 2021": {
     "platform": "VOLKSWAGEN_UP_MK1",
     "make": "Volkswagen",
     "brand": "volkswagen",
     "model": "e-Up",
     "year": [
-      "2020",
-      "2021",
-      "2022",
-      "2023"
+      "2021"
     ],
     "package": "Lane Assist"
   },

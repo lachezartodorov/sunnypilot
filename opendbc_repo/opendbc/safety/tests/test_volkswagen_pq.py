@@ -5,6 +5,7 @@ from opendbc.car.volkswagen.values import VolkswagenSafetyFlags
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
+import opendbc.safety.tests.mads_common as mads_common
 from opendbc.safety.tests.common import CANPackerSafety
 
 MSG_LENKHILFE_3 = 0x0D0       # RX from EPS, for steering angle and driver steering torque
@@ -31,6 +32,7 @@ class TestVolkswagenPqSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeri
 
   DRIVER_TORQUE_ALLOWANCE = 80
   DRIVER_TORQUE_FACTOR = 3
+  HCA_ACTIVE_STATUS = 7
 
   def _set_prev_torque(self, t):
     self.safety.set_desired_torque_last(t)
@@ -62,8 +64,9 @@ class TestVolkswagenPqSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeri
     return self.packer.make_can_msg_safety("Lenkhilfe_3", 0, values)
 
   # openpilot steering output torque
-  def _torque_cmd_msg(self, torque, steer_req=1, hca_status=7):
-    values = {"LM_Offset": abs(torque), "LM_OffSign": torque < 0, "HCA_Status": hca_status if steer_req else 3}
+  def _torque_cmd_msg(self, torque, steer_req=1, hca_status=None):
+    active_status = self.HCA_ACTIVE_STATUS if hca_status is None else hca_status
+    values = {"LM_Offset": abs(torque), "LM_OffSign": torque < 0, "HCA_Status": active_status if steer_req else 3}
     return self.packer.make_can_msg_safety("HCA_1", 0, values)
 
   # ACC engagement and brake light switch status
@@ -130,26 +133,50 @@ class TestVolkswagenPqStockSafety(TestVolkswagenPqSafetyBase):
     self.assertTrue(self._tx(self._button_msg(resume=True)))
 
 
-class TestVolkswagenPqUpSafety(TestVolkswagenPqSafetyBase):
+class TestVolkswagenPqUpSafety(TestVolkswagenPqSafetyBase, mads_common.MadsSafetyTestBase):
   TX_MSGS = [[MSG_HCA_1, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [MSG_HCA_1]}
   RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_1,)}
+  HCA_ACTIVE_STATUS = 5
 
   def setUp(self):
     self.packer = CANPackerSafety("vw_pq")
     self.safety = libsafety_py.libsafety
     self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, VolkswagenSafetyFlags.PQ_UP)
     self.safety.init_tests()
+    self.safety.set_mads_button_press(-1)
+    self.safety.set_controls_requested_lateral(False)
+    self.safety.set_mads_params(False, False, False)
+    self.safety.set_heartbeat_engaged_mads(True)
+
+  def _lkas_button_msg(self, enabled):
+    raise NotImplementedError
+
+  def _acc_state_msg(self, enabled):
+    return self._motor_5_msg(main_switch=enabled)
+
+  def _torque_cmd_msg(self, torque, steer_req=1, hca_status=None):
+    # Match the production controller exactly: READY (3) at zero, ACTIVE (5)
+    # while requesting torque.
+    if hca_status is None and torque == 0:
+      hca_status = 3
+    return super()._torque_cmd_msg(torque, steer_req, hca_status)
 
   def test_stock_hca_status(self):
     self.safety.set_controls_allowed(1)
     self.assertTrue(self._tx(self._torque_cmd_msg(self.MAX_RATE_UP, steer_req=1, hca_status=5)))
+    self.assertFalse(self._tx(self._torque_cmd_msg(self.MAX_RATE_UP, steer_req=1, hca_status=7)))
+    self.assertFalse(self._tx(self._torque_cmd_msg(0, steer_req=1, hca_status=7)))
+    self.assertTrue(self._tx(self._torque_cmd_msg(0, steer_req=0)))
 
   def test_main_switch_updates_mads_state(self):
+    self.safety.set_mads_params(True, False, False)
     self._rx(self._motor_5_msg(main_switch=True))
     self.assertTrue(self.safety.get_acc_main_on())
+    self.assertTrue(self.safety.get_controls_allowed_lateral())
     self._rx(self._motor_5_msg(main_switch=False))
     self.assertFalse(self.safety.get_acc_main_on())
+    self.assertFalse(self.safety.get_controls_allowed_lateral())
 
 
 class TestVolkswagenPqLongSafety(TestVolkswagenPqSafetyBase, common.LongitudinalAccelSafetyTest):

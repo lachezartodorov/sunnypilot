@@ -24,7 +24,7 @@ class CarInterface(CarInterfaceBase):
       if candidate == CAR.VOLKSWAGEN_UP_MK1:
         # No Getriebe_1. CarState combines the Motor_5 interlock and reverse
         # light to distinguish drivable D/B from non-drivable P/N and R.
-        ret.transmissionType = TransmissionType.manual
+        ret.transmissionType = TransmissionType.direct
         safety_configs[0].safetyParam |= VolkswagenSafetyFlags.PQ_UP.value
       elif 0x440 in fingerprint[0] or docs:  # Getriebe_1
         ret.transmissionType = TransmissionType.automatic
@@ -36,7 +36,7 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.networkLocation = NetworkLocation.fwdCamera
 
-      # The e-Up is enabled for an explicit stock-EPS test port. Other PQ cars retain release gating.
+      # The e-Up uses its dedicated safety configuration. Other PQ cars retain release gating.
       ret.dashcamOnly = is_release and candidate != CAR.VOLKSWAGEN_UP_MK1
 
     elif ret.flags & VolkswagenFlags.MLB:

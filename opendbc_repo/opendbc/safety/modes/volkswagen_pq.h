@@ -205,7 +205,14 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
     uint32_t hca_status = ((msg->data[1] >> 4) & 0xFU);
     bool steer_req = ((hca_status == 5U) || (hca_status == 7U));
 
-    if (steer_torque_cmd_checks(desired_torque, steer_req, VOLKSWAGEN_PQ_STEERING_LIMITS)) {
+    // The stock e-Up EPS stream uses READY (3) with zero torque and ACTIVE
+    // (5) for steering. Do not permit the generic PQ active state (7), or any
+    // other unobserved state, on the dedicated e-Up safety configuration.
+    bool up_hca_status_invalid = volkswagen_pq_up &&
+                                 !(((hca_status == 3U) && (desired_torque == 0)) || (hca_status == 5U));
+    bool torque_cmd_invalid = steer_torque_cmd_checks(desired_torque, steer_req, VOLKSWAGEN_PQ_STEERING_LIMITS);
+
+    if (up_hca_status_invalid || torque_cmd_invalid) {
       tx = false;
     }
   }

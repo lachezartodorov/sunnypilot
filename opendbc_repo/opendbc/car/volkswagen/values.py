@@ -367,7 +367,7 @@ class CAR(Platforms):
     wmis={WMI.VOLKSWAGEN_USA_CAR},
   )
   VOLKSWAGEN_UP_MK1 = VolkswagenPQPlatformConfig(
-    [VWCarDocs("Volkswagen e-Up 2020-23")],
+    [VWCarDocs("Volkswagen e-Up 2021")],
     VolkswagenCarSpecs(mass=1235, wheelbase=2.42),
     chassis_codes={"AA"},
     wmis={WMI.VOLKSWAGEN_EUROPE_CAR},

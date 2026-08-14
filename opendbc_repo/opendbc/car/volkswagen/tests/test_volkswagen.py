@@ -5,7 +5,8 @@ import unittest
 from opendbc.car import DT_CTRL
 from opendbc.car.structs import CarParams
 from opendbc.car.volkswagen.carcontroller import HCAMitigation
-from opendbc.car.volkswagen.values import CAR, CarControllerParams as CCP, FW_QUERY_CONFIG, WMI
+from opendbc.car.volkswagen.carstate import CarState
+from opendbc.car.volkswagen.values import CAR, CarControllerParams as CCP, FW_QUERY_CONFIG, GearShifter, WMI
 from opendbc.car.volkswagen.fingerprints import FW_VERSIONS
 
 Ecu = CarParams.Ecu
@@ -28,6 +29,22 @@ class TestVolkswagenHCAMitigation(unittest.TestCase):
         should_nudge = actuator_value != 0 and frame == self.STUCK_TORQUE_FRAMES
         expected_torque = actuator_value - (1, -1)[actuator_value < 0] if should_nudge else actuator_value
         assert hca_mitigation.update(actuator_value, actuator_value) == expected_torque, f"{frame=}"
+
+
+class TestVolkswagenUpState(unittest.TestCase):
+  def test_gear_mapping(self):
+    cases = {
+      # Missing critical input must fail closed even though both decoded bits
+      # have their zero defaults, which otherwise resembles D/B.
+      (False, False, False): GearShifter.unknown,
+      (False, True, True): GearShifter.neutral,
+      (True, False, True): GearShifter.reverse,
+      (True, True, True): GearShifter.reverse,
+      (False, False, True): GearShifter.drive,
+    }
+    for inputs, expected in cases.items():
+      with self.subTest(inputs=inputs):
+        self.assertEqual(CarState.parse_up_gear(*inputs), expected)
 
 class TestVolkswagenPlatformConfigs(unittest.TestCase):
   def test_spare_part_fw_pattern(self):

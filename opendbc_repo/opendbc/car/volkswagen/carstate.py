@@ -42,6 +42,21 @@ class CarState(CarStateBase):
 
     return button_events
 
+  @staticmethod
+  def parse_up_gear(reverse_light: bool, selector_interlock: bool, signals_valid: bool) -> GearShifter:
+    # Fail closed during startup. A zero-initialized parser must never make a
+    # missing Motor_5/Gate_Komf_1 stream look like the D/B combination.
+    if not signals_valid:
+      return GearShifter.unknown
+    if reverse_light:
+      return GearShifter.reverse
+    if selector_interlock:
+      # P and N are not separately exposed on the bus available to the
+      # harness. Both must remain non-drivable for engagement gating.
+      return GearShifter.neutral
+    # The selector interlock is released in both D and regenerative B.
+    return GearShifter.drive
+
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     pt_cp = can_parsers[Bus.pt]
     cam_cp = can_parsers[Bus.cam]
@@ -166,15 +181,9 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
       reverse_light = bool(pt_cp.vl["Gate_Komf_1"]["GK1_Rueckfahr"])
       selector_interlock = bool(pt_cp.vl["Motor_5"]["MO5_Interlock"])
-      if reverse_light:
-        ret.gearShifter = GearShifter.reverse
-      elif selector_interlock:
-        # P and N are not separately exposed on the bus available to the
-        # harness. Both must remain non-drivable for engagement gating.
-        ret.gearShifter = GearShifter.neutral
-      else:
-        # The selector interlock is released in both D and regenerative B.
-        ret.gearShifter = GearShifter.drive
+      gear_signals_valid = (pt_cp.ts_nanos["Gate_Komf_1"]["GK1_Rueckfahr"] != 0 and
+                            pt_cp.ts_nanos["Motor_5"]["MO5_Interlock"] != 0)
+      ret.gearShifter = self.parse_up_gear(reverse_light, selector_interlock, gear_signals_valid)
     elif self.CP.transmissionType == TransmissionType.automatic:
       ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Getriebe_1"]["GE1_Wahl_Pos"], None))
     elif self.CP.transmissionType == TransmissionType.manual:
@@ -359,8 +368,18 @@ class CarState(CarStateBase):
 
   @staticmethod
   def get_can_parsers_pq(CP):
+    pt_messages = []
+    if CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+      # These frequencies were measured from the stock 2021 e-Up route. In
+      # addition to parser-level CAN validity, explicit registration prevents
+      # zero-initialized gear/cruise values from being trusted at startup.
+      pt_messages += [
+        ("Motor_2", 50),
+        ("Motor_5", 50),
+        ("Gate_Komf_1", 10),
+      ]
     return {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).pt),
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).cam),
       Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).alt),
     }
