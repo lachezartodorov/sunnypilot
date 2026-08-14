@@ -163,7 +163,19 @@ class CarState(CarStateBase):
     ret.parkingBrake = bool(pt_cp.vl["Kombi_1"]["Bremsinfo"])
 
     # Update gear and/or clutch position data.
-    if self.CP.transmissionType == TransmissionType.automatic:
+    if self.CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1:
+      reverse_light = bool(pt_cp.vl["Gate_Komf_1"]["GK1_Rueckfahr"])
+      selector_interlock = bool(pt_cp.vl["Motor_5"]["MO5_Interlock"])
+      if reverse_light:
+        ret.gearShifter = GearShifter.reverse
+      elif selector_interlock:
+        # P and N are not separately exposed on the bus available to the
+        # harness. Both must remain non-drivable for engagement gating.
+        ret.gearShifter = GearShifter.neutral
+      else:
+        # The selector interlock is released in both D and regenerative B.
+        ret.gearShifter = GearShifter.drive
+    elif self.CP.transmissionType == TransmissionType.automatic:
       ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Getriebe_1"]["GE1_Wahl_Pos"], None))
     elif self.CP.transmissionType == TransmissionType.manual:
       reverse_light = bool(pt_cp.vl["Gate_Komf_1"]["GK1_Rueckfahr"])

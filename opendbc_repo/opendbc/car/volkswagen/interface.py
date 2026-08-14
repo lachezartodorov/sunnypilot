@@ -22,7 +22,8 @@ class CarInterface(CarInterfaceBase):
       ret.enableBsm = 0x3BA in fingerprint[0]  # SWA_1
 
       if candidate == CAR.VOLKSWAGEN_UP_MK1:
-        # No Getriebe_1; use the reverse-light signal as for a manual transmission.
+        # No Getriebe_1. CarState combines the Motor_5 interlock and reverse
+        # light to distinguish drivable D/B from non-drivable P/N and R.
         ret.transmissionType = TransmissionType.manual
         safety_configs[0].safetyParam |= VolkswagenSafetyFlags.PQ_UP.value
       elif 0x440 in fingerprint[0] or docs:  # Getriebe_1
