@@ -8,13 +8,9 @@ from opendbc.car.vehicle_model import VehicleModel
 from openpilot.common.realtime import DT_CTRL, Ratekeeper
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
-from opendbc.car.volkswagen.values import CAR
 
 LongCtrlState = car.CarControl.Actuators.LongControlState
 MAX_LAT_ACCEL = 3.0
-# JoystickDebugMode only: cap the e-Up test port at 80% of the normal 3 Nm
-# controller limit. Normal onroad control never runs joystickd.
-EUP_TEST_STEER_SCALE = 0.80
 
 
 def joystickd_thread():
@@ -23,8 +19,7 @@ def joystickd_thread():
   CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
   VM = VehicleModel(CP)
 
-  sm = messaging.SubMaster(['carState', 'onroadEvents', 'liveParameters', 'selfdriveState', 'selfdriveStateSP', 'testJoystick'],
-                           frequency=1. / DT_CTRL)
+  sm = messaging.SubMaster(['carState', 'onroadEvents', 'liveParameters', 'selfdriveState', 'testJoystick'], frequency=1. / DT_CTRL)
   pm = messaging.PubMaster(['carControl', 'controlsState'])
 
   rk = Ratekeeper(100, print_delay_threshold=None)
@@ -35,8 +30,7 @@ def joystickd_thread():
     cc_msg.valid = True
     CC = cc_msg.carControl
     CC.enabled = sm['selfdriveState'].enabled
-    lateral_active = sm['selfdriveState'].active or sm['selfdriveStateSP'].mads.active
-    CC.latActive = lateral_active and not sm['carState'].steerFaultTemporary and not sm['carState'].steerFaultPermanent
+    CC.latActive = sm['selfdriveState'].active and not sm['carState'].steerFaultTemporary and not sm['carState'].steerFaultPermanent
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in sm['onroadEvents']) and CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = sm['carState'].cruiseState.enabled and (not CC.enabled or not CP.pcmCruise)
     CC.hudControl.leadDistanceBars = 2
@@ -60,8 +54,7 @@ def joystickd_thread():
       max_curvature = MAX_LAT_ACCEL / max(sm['carState'].vEgo ** 2, 5)
       max_angle = math.degrees(VM.get_steer_from_curvature(max_curvature, sm['carState'].vEgo, sm['liveParameters'].roll))
 
-      steer_scale = EUP_TEST_STEER_SCALE if CP.carFingerprint == CAR.VOLKSWAGEN_UP_MK1 else 1.0
-      actuators.torque = float(np.clip(joystick_axes[1], -1, 1)) * steer_scale
+      actuators.torque = float(np.clip(joystick_axes[1], -1, 1))
       actuators.steeringAngleDeg, actuators.curvature = actuators.torque * max_angle, actuators.torque * -max_curvature
 
     pm.send('carControl', cc_msg)

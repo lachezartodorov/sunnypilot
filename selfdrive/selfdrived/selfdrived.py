@@ -55,7 +55,6 @@ IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 class SelfdriveD(CruiseHelper):
   def __init__(self, CP=None, CP_SP=None):
     self.params = Params()
-    self.joystick_debug = self.params.get_bool("JoystickDebugMode")
 
     # Ensure the current branch is cached, otherwise the first cycle lags
     build_metadata = get_build_metadata()
@@ -93,8 +92,6 @@ class SelfdriveD(CruiseHelper):
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
 
     ignore = self.sensor_packets + self.gps_packets + ['alertDebug', 'lateralManeuverPlan'] + ['modelDataV2SP']
-    if self.joystick_debug:
-      ignore += ['liveTorqueParameters']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
     if REPLAY:
@@ -395,7 +392,7 @@ class SelfdriveD(CruiseHelper):
     # generic catch-all. ideally, a more specific event should be added above instead
     has_disable_events = self.events.contains(ET.NO_ENTRY) and (self.events.contains(ET.SOFT_DISABLE) or self.events.contains(ET.IMMEDIATE_DISABLE))
     no_system_errors = (not has_disable_events) or (len(self.events) == num_events)
-    if not self.sm.all_checks() and no_system_errors and not self.joystick_debug:
+    if not self.sm.all_checks() and no_system_errors:
       if not self.sm.all_alive():
         self.events.add(EventName.commIssue)
       elif not self.sm.all_freq_ok():
@@ -414,7 +411,7 @@ class SelfdriveD(CruiseHelper):
     else:
       self.logged_comm_issue = None
 
-    if not self.CP.notCar and not self.joystick_debug:
+    if not self.CP.notCar:
       if not self.sm['livePose'].posenetOK:
         self.events.add(EventName.posenetInvalid)
       if not self.sm['livePose'].inputsOK:
