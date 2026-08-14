@@ -12,7 +12,9 @@ from opendbc.car.volkswagen.values import CAR
 
 LongCtrlState = car.CarControl.Actuators.LongControlState
 MAX_LAT_ACCEL = 3.0
-EUP_TEST_STEER_SCALE = 0.10
+# JoystickDebugMode only: cap the e-Up test port at 80% of the normal 3 Nm
+# controller limit. Normal onroad control never runs joystickd.
+EUP_TEST_STEER_SCALE = 0.80
 
 
 def joystickd_thread():
