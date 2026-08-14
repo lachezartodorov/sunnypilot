@@ -34,7 +34,7 @@ cd /data/openpilot
 PYTHONPATH=/data/openpilot /usr/local/venv/bin/python3 tools/joystick/eup_wasd_control.py --torque-percent 10
 ```
 
-After going onroad, select D or B, roll at 3-8 km/h, release the brake, and turn
+After going onroad, select D or B, roll at 3-20 km/h, release the brake, and turn
 cruise main on without pressing Set/Resume. Press `E` to run the one-second
 health check and arm the controller. Then use:
 

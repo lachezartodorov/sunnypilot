@@ -10,7 +10,7 @@ from openpilot.tools.lib.kbhit import KBHit
 
 
 MIN_SPEED_KPH = 3.0
-MAX_SPEED_KPH = 8.0
+MAX_SPEED_KPH = 20.0
 PUBLISH_PERIOD = 0.1
 MAX_INPUT_AGE = 0.35
 UNHEALTHY_EVENTS = {
