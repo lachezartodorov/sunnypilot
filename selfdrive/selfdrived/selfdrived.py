@@ -92,6 +92,8 @@ class SelfdriveD(CruiseHelper):
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
 
     ignore = self.sensor_packets + self.gps_packets + ['alertDebug', 'lateralManeuverPlan'] + ['modelDataV2SP']
+    if self.params.get_bool("JoystickDebugMode"):
+      ignore += ['liveTorqueParameters']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
     if REPLAY:
