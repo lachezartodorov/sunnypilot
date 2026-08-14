@@ -49,4 +49,6 @@ portable key-release event, so every A/D press grants only 0.35 seconds of
 steering. Holding the key relies on terminal key repeat; releasing it returns to
 zero after the dead-man timeout. The controller continuously disarms on a stale
 input, unhealthy event, gear/speed/brake change, steering fault, loss of MADS,
-or a panda safety failure.
+or a panda safety failure. On this A1, `selfdrivedLagging` can be present as a
+baseline performance advisory. The WASD tool reports it but does not disarm on
+that event alone; stale subscribed data and all other safety gates remain fatal.

@@ -14,9 +14,10 @@ MAX_SPEED_KPH = 8.0
 PUBLISH_PERIOD = 0.1
 MAX_INPUT_AGE = 0.35
 UNHEALTHY_EVENTS = {
-  "selfdrivedLagging", "commIssue", "commIssueAvgFreq", "controlsMismatch",
-  "canError", "canBusMissing", "usbError", "processNotRunning",
+  "commIssue", "commIssueAvgFreq", "controlsMismatch", "canError",
+  "canBusMissing", "usbError", "processNotRunning",
 }
+ADVISORY_EVENTS = {"selfdrivedLagging"}
 SERVICES = ["carState", "selfdriveStateSP", "pandaStates", "onroadEvents"]
 
 
@@ -46,6 +47,7 @@ def snapshot_gate():
   sm = messaging.SubMaster(SERVICES)
   seen = set()
   health_faults = set()
+  advisories = set()
   deadline = time.monotonic() + 1.0
   while time.monotonic() < deadline:
     sm.update(100)
@@ -53,7 +55,9 @@ def snapshot_gate():
     if sm.updated["onroadEvents"]:
       health_faults.update(str(event.name) for event in sm["onroadEvents"]
                            if str(event.name) in UNHEALTHY_EVENTS)
-  return sm, seen, health_faults
+      advisories.update(str(event.name) for event in sm["onroadEvents"]
+                        if str(event.name) in ADVISORY_EVENTS)
+  return sm, seen, health_faults, advisories
 
 
 def current_gates(sm, seen, last_update, health_faults):
@@ -108,6 +112,7 @@ def main():
   last_sent_axis = 0.0
   next_publish = 0.0
   warned_longitudinal = False
+  lag_warning_shown = False
   quit_requested = False
 
   params.put_bool("JoystickDebugMode", True, block=True)
@@ -127,7 +132,7 @@ def main():
           print("STOPPED / DISARMED", flush=True)
         elif key == "e" and not armed:
           print("Checking one second of fresh vehicle data...", flush=True)
-          candidate_sm, candidate_seen, candidate_faults = snapshot_gate()
+          candidate_sm, candidate_seen, candidate_faults, candidate_advisories = snapshot_gate()
           candidate_last = {service: time.monotonic() for service in SERVICES}
           gates, speed_kph = current_gates(candidate_sm, candidate_seen, candidate_last, candidate_faults)
           if all(gates.values()):
@@ -137,6 +142,9 @@ def main():
             health_faults = set()
             armed = True
             print(f"ARMED at {speed_kph:.2f} km/h; hold/tap A or D", flush=True)
+            if candidate_advisories:
+              print(f"ADVISORY (not a disarm): {sorted(candidate_advisories)}", flush=True)
+              lag_warning_shown = True
           else:
             print(f"ARM REFUSED: speed={speed_kph:.2f} km/h, gates={gates}, "
                   f"health_faults={sorted(candidate_faults)}", flush=True)
@@ -159,6 +167,11 @@ def main():
         if sm.updated["onroadEvents"]:
           health_faults = {str(event.name) for event in sm["onroadEvents"]
                            if str(event.name) in UNHEALTHY_EVENTS}
+          advisories = {str(event.name) for event in sm["onroadEvents"]
+                        if str(event.name) in ADVISORY_EVENTS}
+          if advisories and not lag_warning_shown:
+            print(f"ADVISORY (not a disarm): {sorted(advisories)}", flush=True)
+            lag_warning_shown = True
 
         gates, speed_kph = current_gates(sm, seen, last_update, health_faults)
         if not all(gates.values()):
