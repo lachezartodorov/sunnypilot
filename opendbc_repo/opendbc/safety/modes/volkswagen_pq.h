@@ -268,7 +268,7 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
     // safety mode is required before another burst can be sent.
     bool zero_accel_probe_cmd = volkswagen_pq_up && volkswagen_longitudinal &&
                                 volkswagen_pq_up_zero_accel_probe &&
-                                ((msg->data[1] & 0xF0U) == 0x30U) &&
+                                ((msg->data[1] & 0xF0U) == 0x10U) &&
                                 (msg->data[2] == 0x81U) && (msg->data[3] == 0xA4U) &&
                                 (msg->data[4] == 0x05U) && (msg->data[5] == 0x28U) &&
                                 (msg->data[6] == 0x96U) && (msg->data[7] == 0x00U) &&
@@ -289,7 +289,7 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
 
     bool small_decel_probe_cmd = volkswagen_pq_up && volkswagen_longitudinal &&
                                  volkswagen_pq_up_small_decel_probe &&
-                                 ((msg->data[1] & 0xF0U) == 0x30U) &&
+                                 ((msg->data[1] & 0xF0U) == 0x10U) &&
                                  (msg->data[2] == 0x81U) && (msg->data[3] == 0x7CU) &&
                                  (msg->data[4] == 0x05U) && (msg->data[5] == 0x28U) &&
                                  (msg->data[6] == 0x96U) && (msg->data[7] == 0x00U) &&

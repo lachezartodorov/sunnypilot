@@ -278,7 +278,7 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
 
   def _active_zero_accel_msg(self, **overrides):
     values = {
-      "ACS_Sta_ADR": 3,
+      "ACS_Sta_ADR": 1,
       "ACS_StSt_Info": 1,
       "ACS_Typ_ACC": 0,
       "ACS_Anhaltewunsch": 0,
@@ -325,6 +325,7 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
   def test_zero_accel_probe_rejects_nearby_commands(self):
     invalid_variants = (
       {"ACS_Sta_ADR": 2},
+      {"ACS_Sta_ADR": 3},
       {"ACS_StSt_Info": 0},
       {"ACS_FreigSollB": 0},
       {"ACS_Sollbeschl": 0.005},
@@ -364,6 +365,7 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
   def test_small_decel_probe_rejects_nearby_commands(self):
     invalid_variants = (
       {"ACS_Sta_ADR": 2},
+      {"ACS_Sta_ADR": 3},
       {"ACS_StSt_Info": 0},
       {"ACS_FreigSollB": 0},
       {"ACS_Sollbeschl": -0.195},

@@ -29,7 +29,7 @@ SEND_HZ = 50
 MAX_DURATION = 0.5
 MAX_PRESSURE_RISE_BAR = 0.5
 MAX_RELEASED_BASELINE_BAR = 1.0
-EXPECTED_COUNTER_ZERO_DATA = bytes.fromhex("ae3081a405289600")
+EXPECTED_COUNTER_ZERO_DATA = bytes.fromhex("8e1081a405289600")
 
 
 def build_active_zero_acc_system(packer=None):
@@ -38,7 +38,7 @@ def build_active_zero_acc_system(packer=None):
 
   packer = CANPacker("vw_pq") if packer is None else packer
   messages = pqcan.create_acc_accel_control(
-    packer, BUS, acc_type=0, acc_enabled=True, accel=0.0, acc_control=3,
+    packer, BUS, acc_type=0, acc_enabled=True, accel=0.0, acc_control=1,
     stopping=False, starting=False, esp_hold=False,
   )
   if len(messages) != 1:
@@ -46,7 +46,7 @@ def build_active_zero_acc_system(packer=None):
   address, data, bus = messages[0]
   if address != ACC_SYSTEM_ADDR or bus != BUS:
     raise RuntimeError(f"unexpected active-zero target: 0x{address:X}/bus {bus}")
-  if (data[1] & 0xF0) != 0x30 or data[2:] != EXPECTED_COUNTER_ZERO_DATA[2:]:
+  if (data[1] & 0xF0) != 0x10 or data[2:] != EXPECTED_COUNTER_ZERO_DATA[2:]:
     raise RuntimeError(f"active-zero fields changed: {data.hex()}")
   if data[0] != (data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6] ^ data[7]):
     raise RuntimeError(f"active-zero checksum is invalid: {data.hex()}")
