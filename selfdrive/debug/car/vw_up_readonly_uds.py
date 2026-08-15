@@ -17,6 +17,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+# Make direct invocation work on AGNOS without requiring launch_env.sh.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+  sys.path.insert(0, str(REPO_ROOT))
+
 MIN_QUERY_INTERVAL = 0.2  # Never send more than five requests per second.
 MIN_DIAG_ADDR = 0x700
 MAX_DIAG_ADDR = 0x7FE
