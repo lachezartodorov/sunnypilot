@@ -18,9 +18,14 @@ static bool volkswagen_pq_up = false;
 static bool volkswagen_pq_up_zero_accel_probe = false;
 static uint8_t volkswagen_pq_up_zero_accel_probe_count = 0U;
 static uint32_t volkswagen_pq_up_zero_accel_probe_start_ts = 0U;
+static bool volkswagen_pq_up_small_decel_probe = false;
+static uint8_t volkswagen_pq_up_small_decel_probe_count = 0U;
+static uint32_t volkswagen_pq_up_small_decel_probe_start_ts = 0U;
 
 #define VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_MSGS 50U
 #define VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_US 1000000U
+#define VOLKSWAGEN_PQ_UP_SMALL_DECEL_PROBE_MAX_MSGS 10U
+#define VOLKSWAGEN_PQ_UP_SMALL_DECEL_PROBE_MAX_US 200000U
 
 static uint32_t volkswagen_pq_get_checksum(const CANPacket_t *msg) {
   return (uint32_t)msg->data[(msg->addr == MSG_MOTOR_5) ? 7 : 0];
@@ -100,11 +105,15 @@ static safety_config volkswagen_pq_init(uint16_t param) {
   volkswagen_pq_up_zero_accel_probe = false;
   volkswagen_pq_up_zero_accel_probe_count = 0U;
   volkswagen_pq_up_zero_accel_probe_start_ts = 0U;
+  volkswagen_pq_up_small_decel_probe = false;
+  volkswagen_pq_up_small_decel_probe_count = 0U;
+  volkswagen_pq_up_small_decel_probe_start_ts = 0U;
 
 #ifdef ALLOW_DEBUG
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
   volkswagen_pq_up_zero_accel_probe = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE);
   volkswagen_pq_up_diag_passthrough = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP_DIAG_PASSTHROUGH);
+  volkswagen_pq_up_small_decel_probe = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP_SMALL_DECEL_PROBE);
 #endif
   if (volkswagen_pq_up) {
     if (volkswagen_pq_up_diag_passthrough) {
@@ -274,6 +283,27 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
                                VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_US;
       if (volkswagen_pq_up_zero_accel_probe_count <= VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_MSGS) {
         volkswagen_pq_up_zero_accel_probe_count++;
+      }
+      accel_violation = !(within_message_limit && within_time_limit);
+    }
+
+    bool small_decel_probe_cmd = volkswagen_pq_up && volkswagen_longitudinal &&
+                                 volkswagen_pq_up_small_decel_probe &&
+                                 ((msg->data[1] & 0xF0U) == 0x30U) &&
+                                 (msg->data[2] == 0x81U) && (msg->data[3] == 0x7CU) &&
+                                 (msg->data[4] == 0x05U) && (msg->data[5] == 0x28U) &&
+                                 (msg->data[6] == 0x96U) && (msg->data[7] == 0x00U) &&
+                                 (msg->data[0] == volkswagen_pq_compute_checksum(msg));
+    if (accel_violation && small_decel_probe_cmd) {
+      uint32_t now = microsecond_timer_get();
+      if (volkswagen_pq_up_small_decel_probe_count == 0U) {
+        volkswagen_pq_up_small_decel_probe_start_ts = now;
+      }
+      bool within_message_limit = volkswagen_pq_up_small_decel_probe_count < VOLKSWAGEN_PQ_UP_SMALL_DECEL_PROBE_MAX_MSGS;
+      bool within_time_limit = safety_get_ts_elapsed(now, volkswagen_pq_up_small_decel_probe_start_ts) <=
+                               VOLKSWAGEN_PQ_UP_SMALL_DECEL_PROBE_MAX_US;
+      if (volkswagen_pq_up_small_decel_probe_count <= VOLKSWAGEN_PQ_UP_SMALL_DECEL_PROBE_MAX_MSGS) {
+        volkswagen_pq_up_small_decel_probe_count++;
       }
       accel_violation = !(within_message_limit && within_time_limit);
     }

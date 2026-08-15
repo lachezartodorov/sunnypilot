@@ -188,6 +188,8 @@ class VolkswagenSafetyFlags(IntFlag):
   # Debug-only handoff after direct probes: block all host TX while preserving
   # camera/powertrain passthrough until the normal stack resumes.
   PQ_UP_DIAG_PASSTHROUGH = 8
+  # Debug-only: permit a very short, exact -0.20 m/s2 ACC_System probe.
+  PQ_UP_SMALL_DECEL_PROBE = 16
 
 
 class VolkswagenFlags(IntFlag):

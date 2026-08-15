@@ -295,6 +295,14 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
     self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
     self.safety.init_tests()
 
+  def _active_small_decel_msg(self, **overrides):
+    return self._active_zero_accel_msg(**{"ACS_Sollbeschl": -0.2, **overrides})
+
+  def _enable_small_decel_probe(self):
+    param = VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.LONG_CONTROL | VolkswagenSafetyFlags.PQ_UP_SMALL_DECEL_PROBE
+    self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
+    self.safety.init_tests()
+
   def test_zero_accel_probe_requires_debug_flag(self):
     self.safety.set_controls_allowed(False)
     self.assertFalse(self._tx(self._active_zero_accel_msg()))
@@ -337,6 +345,37 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
     self.assertFalse(self._tx(self._accel_msg(3.01)))
     self.assertEqual(0, self.safety.safety_fwd_hook(2, MSG_HCA_1))
     self.assertEqual(2, self.safety.safety_fwd_hook(0, MSG_BREMSE_1))
+
+  def test_small_decel_probe_exact_frame_and_burst_limit(self):
+    self._enable_small_decel_probe()
+    self.safety.set_controls_allowed(False)
+    for _ in range(10):
+      self.assertTrue(self._tx(self._active_small_decel_msg()))
+    self.assertFalse(self._tx(self._active_small_decel_msg()))
+
+  def test_small_decel_probe_time_limit(self):
+    self._enable_small_decel_probe()
+    self.safety.set_controls_allowed(False)
+    self.safety.set_timer(0)
+    self.assertTrue(self._tx(self._active_small_decel_msg()))
+    self.safety.set_timer(200_001)
+    self.assertFalse(self._tx(self._active_small_decel_msg()))
+
+  def test_small_decel_probe_rejects_nearby_commands(self):
+    invalid_variants = (
+      {"ACS_Sta_ADR": 2},
+      {"ACS_StSt_Info": 0},
+      {"ACS_FreigSollB": 0},
+      {"ACS_Sollbeschl": -0.195},
+      {"ACS_Sollbeschl": -0.205},
+      {"ACS_zul_Regelabw": 0.205},
+      {"ACS_max_AendGrad": 3.02},
+    )
+    for overrides in invalid_variants:
+      with self.subTest(overrides=overrides):
+        self._enable_small_decel_probe()
+        self.safety.set_controls_allowed(False)
+        self.assertFalse(self._tx(self._active_small_decel_msg(**overrides)))
 
 
 if __name__ == "__main__":
