@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 AGNOS_PYTHON = Path("/usr/local/venv/bin/python")
+AGNOS_REEXEC_MARKER = "VW_UP_UDS_AGNOS_REEXEC"
 
 MIN_QUERY_INTERVAL = 0.2  # Never send more than five requests per second.
 MIN_DIAG_ADDR = 0x700
@@ -62,14 +63,17 @@ def parse_int(value: str) -> int:
 
 def ensure_agnos_python() -> None:
   """Re-exec with openpilot's dependency environment on AGNOS."""
-  if not AGNOS_PYTHON.is_file() or Path(sys.executable).resolve() == AGNOS_PYTHON.resolve():
+  if not AGNOS_PYTHON.is_file():
     return
   try:
     import numpy  # noqa: F401
   except ModuleNotFoundError:
+    if os.environ.get(AGNOS_REEXEC_MARKER) == "1":
+      raise RuntimeError(f"numpy is unavailable after re-exec with {AGNOS_PYTHON}") from None
     env = os.environ.copy()
     current_pythonpath = env.get("PYTHONPATH")
     env["PYTHONPATH"] = str(REPO_ROOT) if not current_pythonpath else f"{REPO_ROOT}:{current_pythonpath}"
+    env[AGNOS_REEXEC_MARKER] = "1"
     os.execve(AGNOS_PYTHON, [str(AGNOS_PYTHON), *sys.argv], env)
 
 
