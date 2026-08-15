@@ -200,6 +200,39 @@ def load_attempted_dids(path: Path) -> set[int]:
   return attempted
 
 
+def load_positive_dids(path: Path) -> set[int]:
+  positive = set()
+  if not path.is_file():
+    return positive
+  for line in path.read_text(encoding="utf-8").splitlines():
+    try:
+      record = json.loads(line)
+      if record.get("event") == "did_attempt" and record.get("status") == "positive":
+        positive.add(int(record["did"], 0))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+      continue
+  return positive
+
+
+def emit_capture_attempt(output_file, label: str, sample: int, tx_addr: int, rx_addr: int, bus: int, did: int,
+                         status: str, result: ReadResult | None = None, negative_code: int | None = None) -> None:
+  record = {
+    "event": "capture",
+    "label": label,
+    "sample": sample,
+    "monotonic_time": time.monotonic(),
+    "tx_address": f"0x{tx_addr:X}",
+    "rx_address": f"0x{rx_addr:X}",
+    "bus": bus,
+    "did": f"0x{did:04X}",
+    "status": status,
+    "negative_code": negative_code,
+    "result": asdict(result) if result is not None else None,
+  }
+  output_file.write(json.dumps(record, sort_keys=True) + "\n")
+  output_file.flush()
+
+
 def parse_did_range(value: str) -> tuple[int, int]:
   try:
     start_text, end_text = value.split(":", 1)
@@ -278,6 +311,14 @@ def parse_args() -> argparse.Namespace:
   discover.add_argument("--range", dest="did_ranges", action="append", type=parse_did_range, default=[],
                         help="inclusive DID range START:END; may be repeated")
   discover.add_argument("--no-resume", action="store_true", help="repeat DIDs already recorded in --output")
+
+  capture = subparsers.add_parser("capture", help="repeat selected DIDs for one labeled stationary pedal phase")
+  add_common_args(capture)
+  capture.add_argument("address", type=parse_int)
+  capture.add_argument("did", type=parse_int, nargs="*")
+  capture.add_argument("--from-discovery", type=Path, help="include all positive DIDs from a discovery JSONL file")
+  capture.add_argument("--label", required=True, help="phase label, e.g. released, light, medium, firm")
+  capture.add_argument("--samples", type=int, default=10, help="number of samples per DID")
   return parser.parse_args()
 
 
@@ -299,6 +340,7 @@ def main() -> int:
     )
 
   discovery_mode = args.command == "discover"
+  capture_mode = args.command == "capture"
   if args.command == "scan":
     if args.start > args.end:
       raise SystemExit("--start must not be greater than --end")
@@ -320,6 +362,20 @@ def main() -> int:
       raise SystemExit("refusing to scan more than 2048 unique DIDs in one invocation")
     if not args.no_resume:
       dids = [did for did in dids if did not in load_attempted_dids(args.output)]
+    addresses = (args.address,)
+  elif capture_mode:
+    if args.output is None:
+      raise SystemExit("capture requires --output")
+    if args.samples < 1 or args.samples > 100:
+      raise SystemExit("--samples must be between 1 and 100")
+    selected_dids = set(args.did)
+    if args.from_discovery is not None:
+      selected_dids.update(load_positive_dids(args.from_discovery))
+    if not selected_dids:
+      raise SystemExit("capture requires at least one DID or --from-discovery with positive results")
+    dids = sorted(selected_dids)
+    if len(dids) * args.samples > 2000:
+      raise SystemExit("refusing a capture larger than 2000 total DID reads")
     addresses = (args.address,)
   else:
     addresses = (args.address,)
@@ -344,6 +400,25 @@ def main() -> int:
     # ISO-15765 diagnostic CAN address ranges; this program further limits the
     # payload to UDS ReadDataByIdentifier inside read_did().
     panda.set_safety_mode(CarParams.SafetyModel.elm327, 0)
+    if capture_mode:
+      assert output_file is not None
+      rx_addr = validate_address(args.address, args.rx_offset)
+      print(f"Capturing phase '{args.label}': {args.samples} samples x {len(dids)} DIDs", file=sys.stderr, flush=True)
+      for sample in range(args.samples):
+        for did in dids:
+          try:
+            result = read_did(panda, args.address, args.rx_offset, args.bus, did, args.timeout)
+          except MessageTimeoutError:
+            emit_capture_attempt(output_file, args.label, sample, args.address, rx_addr, args.bus, did, "timeout")
+          except NegativeResponseError as e:
+            emit_capture_attempt(output_file, args.label, sample, args.address, rx_addr, args.bus, did,
+                                 "negative", negative_code=e.error_code)
+          else:
+            emit_capture_attempt(output_file, args.label, sample, args.address, rx_addr, args.bus, did,
+                                 "positive", result=result)
+          time.sleep(args.interval)
+        print(f"Capture progress: {sample + 1}/{args.samples}", file=sys.stderr, flush=True)
+      return 0
     if discovery_mode:
       estimated_seconds = len(dids) * (args.timeout + args.interval)
       print(f"Discovering {len(dids)} DIDs; conservative upper estimate {estimated_seconds / 60:.1f} minutes",

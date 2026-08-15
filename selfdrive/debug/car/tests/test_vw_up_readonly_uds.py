@@ -6,6 +6,7 @@ from openpilot.selfdrive.debug.car.vw_up_readonly_uds import (
   expand_did_ranges,
   identify_known_ecu,
   load_attempted_dids,
+  load_positive_dids,
   normalize_part_number,
   numeric_views,
   parse_did_range,
@@ -60,6 +61,14 @@ def test_did_ranges_and_resume(tmp_path):
     'not-json\n'
   )
   assert load_attempted_dids(output) == {0x028D}
+  assert load_positive_dids(output) == set()
+
+  output.write_text(
+    output.read_text()
+    + '{"event":"did_attempt","did":"0x4E06","status":"positive"}\n'
+    + '{"event":"did_attempt","did":"0x4E07","status":"negative"}\n'
+  )
+  assert load_positive_dids(output) == {0x4E06}
 
 
 @pytest.mark.parametrize("part,expected", [
