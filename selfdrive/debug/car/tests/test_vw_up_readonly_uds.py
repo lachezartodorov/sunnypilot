@@ -1,3 +1,5 @@
+import argparse
+
 import pytest
 
 from openpilot.selfdrive.debug.car.vw_up_readonly_uds import (
@@ -10,6 +12,7 @@ from openpilot.selfdrive.debug.car.vw_up_readonly_uds import (
   normalize_part_number,
   numeric_views,
   parse_did_range,
+  parse_did_target,
   validate_address,
   validate_did,
 )
@@ -69,6 +72,14 @@ def test_did_ranges_and_resume(tmp_path):
     + '{"event":"did_attempt","did":"0x4E07","status":"negative"}\n'
   )
   assert load_positive_dids(output) == {0x4E06}
+
+
+def test_did_target():
+  assert parse_did_target("0x73b:0x4e03") == (0x73B, 0x4E03)
+  with pytest.raises(argparse.ArgumentTypeError):
+    parse_did_target("0x73b")
+  with pytest.raises(argparse.ArgumentTypeError):
+    parse_did_target("0x73b:0x10000")
 
 
 @pytest.mark.parametrize("part,expected", [

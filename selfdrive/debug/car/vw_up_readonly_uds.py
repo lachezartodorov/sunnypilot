@@ -253,6 +253,17 @@ def parse_did_range(value: str) -> tuple[int, int]:
   return start, end
 
 
+def parse_did_target(value: str) -> tuple[int, int]:
+  """Parse a physical ECU and DID pair, for example 0x73B:0x4E03."""
+  try:
+    address_text, did_text = value.split(":", 1)
+    address, did = parse_int(address_text), parse_int(did_text)
+    validate_did(did)
+  except (ValueError, TypeError) as e:
+    raise argparse.ArgumentTypeError("target must be ADDRESS:DID, for example 0x73B:0x4E03") from e
+  return address, did
+
+
 DISCOVERY_PRESETS = {
   # Known public e-Up EBKV DIDs plus bounded neighborhoods. These are deliberately
   # narrow because VW vendor-specific measurement DIDs are not contiguous globally.
@@ -323,6 +334,15 @@ def parse_args() -> argparse.Namespace:
   capture.add_argument("--from-discovery", type=Path, help="include all positive DIDs from a discovery JSONL file")
   capture.add_argument("--label", required=True, help="phase label, e.g. released, light, medium, firm")
   capture.add_argument("--samples", type=int, default=10, help="number of samples per DID")
+
+  capture_multi = subparsers.add_parser(
+    "capture-multi", help="interleave selected ReadDataByIdentifier requests across physical ECUs"
+  )
+  add_common_args(capture_multi)
+  capture_multi.add_argument("--target", action="append", type=parse_did_target, required=True,
+                             help="physical ADDRESS:DID pair; repeat for each target")
+  capture_multi.add_argument("--label", required=True, help="phase label, e.g. released, light, medium, firm")
+  capture_multi.add_argument("--samples", type=int, default=10, help="number of samples per target")
   return parser.parse_args()
 
 
@@ -344,7 +364,7 @@ def main() -> int:
     )
 
   discovery_mode = args.command == "discover"
-  capture_mode = args.command == "capture"
+  capture_mode = args.command in ("capture", "capture-multi")
   if args.command == "scan":
     if args.start > args.end:
       raise SystemExit("--start must not be greater than --end")
@@ -369,27 +389,34 @@ def main() -> int:
     addresses = (args.address,)
   elif capture_mode:
     if args.output is None:
-      raise SystemExit("capture requires --output")
+      raise SystemExit(f"{args.command} requires --output")
     if args.samples < 1 or args.samples > 100:
       raise SystemExit("--samples must be between 1 and 100")
-    selected_dids = set(args.did)
-    if args.from_discovery is not None:
-      selected_dids.update(load_positive_dids(args.from_discovery))
-    if not selected_dids:
-      raise SystemExit("capture requires at least one DID or --from-discovery with positive results")
-    dids = sorted(selected_dids)
-    if len(dids) * args.samples > 2000:
+    if args.command == "capture":
+      selected_dids = set(args.did)
+      if args.from_discovery is not None:
+        selected_dids.update(load_positive_dids(args.from_discovery))
+      if not selected_dids:
+        raise SystemExit("capture requires at least one DID or --from-discovery with positive results")
+      targets = [(args.address, did) for did in sorted(selected_dids)]
+    else:
+      targets = sorted(set(args.target))
+    if len(targets) * args.samples > 2000:
       raise SystemExit("refusing a capture larger than 2000 total DID reads")
-    addresses = (args.address,)
   else:
     addresses = (args.address,)
     dids = tuple(args.did)
 
   try:
-    for address in addresses:
-      validate_address(address, args.rx_offset)
-    for did in dids:
-      validate_did(did)
+    if capture_mode:
+      for address, did in targets:
+        validate_address(address, args.rx_offset)
+        validate_did(did)
+    else:
+      for address in addresses:
+        validate_address(address, args.rx_offset)
+      for did in dids:
+        validate_did(did)
   except ValueError as e:
     raise SystemExit(str(e)) from e
 
@@ -406,19 +433,20 @@ def main() -> int:
     panda.set_safety_mode(CarParams.SafetyModel.elm327, 0)
     if capture_mode:
       assert output_file is not None
-      rx_addr = validate_address(args.address, args.rx_offset)
-      print(f"Capturing phase '{args.label}': {args.samples} samples x {len(dids)} DIDs", file=sys.stderr, flush=True)
+      print(f"Capturing phase '{args.label}': {args.samples} samples x {len(targets)} targets",
+            file=sys.stderr, flush=True)
       for sample in range(args.samples):
-        for did in dids:
+        for address, did in targets:
+          rx_addr = validate_address(address, args.rx_offset)
           try:
-            result = read_did(panda, args.address, args.rx_offset, args.bus, did, args.timeout)
+            result = read_did(panda, address, args.rx_offset, args.bus, did, args.timeout)
           except MessageTimeoutError:
-            emit_capture_attempt(output_file, args.label, sample, args.address, rx_addr, args.bus, did, "timeout")
+            emit_capture_attempt(output_file, args.label, sample, address, rx_addr, args.bus, did, "timeout")
           except NegativeResponseError as e:
-            emit_capture_attempt(output_file, args.label, sample, args.address, rx_addr, args.bus, did,
+            emit_capture_attempt(output_file, args.label, sample, address, rx_addr, args.bus, did,
                                  "negative", negative_code=e.error_code)
           else:
-            emit_capture_attempt(output_file, args.label, sample, args.address, rx_addr, args.bus, did,
+            emit_capture_attempt(output_file, args.label, sample, address, rx_addr, args.bus, did,
                                  "positive", result=result)
           time.sleep(args.interval)
         print(f"Capture progress: {sample + 1}/{args.samples}", file=sys.stderr, flush=True)
