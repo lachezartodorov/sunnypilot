@@ -60,6 +60,14 @@ static safety_config volkswagen_pq_init(uint16_t param) {
   // definition. Preserve and forward that stock message; replace only HCA_1.
   static const CanMsg VOLKSWAGEN_PQ_UP_TX_MSGS[] = {{MSG_HCA_1, 0, 5, .check_relay = true}};
 
+  // Debug-only preparation for probing the standard PQ acceleration interface
+  // on the e-Up. The car interface does not enable longitudinal control for
+  // this platform. With no GRA_Neu receiver on the e-Up, the RX hook also has
+  // no path to controls_allowed, so only the inactive acceleration value can
+  // pass the longitudinal command checks while controls are off.
+  static const CanMsg VOLKSWAGEN_PQ_UP_LONG_TX_MSGS[] = {{MSG_HCA_1, 0, 5, .check_relay = true},
+                                                         {MSG_ACC_SYSTEM, 0, 8, .check_relay = true}};
+
   static RxCheck volkswagen_pq_rx_checks[] = {
     {.msg = {{MSG_LENKHILFE_3, 0, 6, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_BREMSE_1, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -87,7 +95,8 @@ static safety_config volkswagen_pq_init(uint16_t param) {
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
 #endif
   if (volkswagen_pq_up) {
-    return BUILD_SAFETY_CFG(volkswagen_pq_up_rx_checks, VOLKSWAGEN_PQ_UP_TX_MSGS);
+    return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_pq_up_rx_checks, VOLKSWAGEN_PQ_UP_LONG_TX_MSGS) : \
+                                     BUILD_SAFETY_CFG(volkswagen_pq_up_rx_checks, VOLKSWAGEN_PQ_UP_TX_MSGS);
   }
   return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_pq_rx_checks, VOLKSWAGEN_PQ_LONG_TX_MSGS) : \
                                    BUILD_SAFETY_CFG(volkswagen_pq_rx_checks, VOLKSWAGEN_PQ_STOCK_TX_MSGS);

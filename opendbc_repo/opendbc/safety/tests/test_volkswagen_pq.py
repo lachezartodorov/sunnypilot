@@ -237,5 +237,42 @@ class TestVolkswagenPqLongSafety(TestVolkswagenPqSafetyBase, common.Longitudinal
                       f"torque cmd rejected with {enabled_status=}")
 
 
+class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.LongitudinalAccelSafetyTest):
+  """Dormant debug configuration for an inactive ACC_System acceptance probe."""
+
+  TX_MSGS = [[MSG_HCA_1, 0], [MSG_ACC_SYSTEM, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [MSG_HCA_1, MSG_ACC_SYSTEM]}
+  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_1, MSG_ACC_SYSTEM)}
+  INACTIVE_ACCEL = 3.01
+
+  def setUp(self):
+    self.packer = CANPackerSafety("vw_pq")
+    self.safety = libsafety_py.libsafety
+    param = VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.LONG_CONTROL
+    self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
+    self.safety.init_tests()
+    self.safety.set_mads_button_press(-1)
+    self.safety.set_controls_requested_lateral(False)
+    self.safety.set_mads_params(False, False, False)
+    self.safety.set_heartbeat_engaged_mads(True)
+
+  # There is intentionally no longitudinal engagement path in this probe
+  # configuration. These generic stock-cruise tests don't apply.
+  def test_disable_control_allowed_from_cruise(self):
+    pass
+
+  def test_enable_control_allowed_from_cruise(self):
+    pass
+
+  def test_cruise_engaged_prev(self):
+    pass
+
+  def test_no_longitudinal_engagement_from_stock_cruise(self):
+    self.safety.set_controls_allowed(0)
+    self._rx(self._motor_5_msg(main_switch=True))
+    self._rx(self._motor_2_msg(cruise_engaged=True))
+    self.assertFalse(self.safety.get_controls_allowed())
+
+
 if __name__ == "__main__":
   unittest.main()
