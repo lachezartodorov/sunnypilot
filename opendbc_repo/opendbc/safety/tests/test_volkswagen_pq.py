@@ -329,6 +329,15 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
         self.safety.set_controls_allowed(False)
         self.assertFalse(self._tx(self._active_zero_accel_msg(**overrides)))
 
+  def test_diag_passthrough_blocks_tx_and_preserves_forwarding(self):
+    param = VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.PQ_UP_DIAG_PASSTHROUGH
+    self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
+    self.safety.init_tests()
+    self.assertFalse(self._tx(self._torque_cmd_msg(0, steer_req=0, hca_status=3)))
+    self.assertFalse(self._tx(self._accel_msg(3.01)))
+    self.assertEqual(0, self.safety.safety_fwd_hook(2, MSG_HCA_1))
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, MSG_BREMSE_1))
+
 
 if __name__ == "__main__":
   unittest.main()

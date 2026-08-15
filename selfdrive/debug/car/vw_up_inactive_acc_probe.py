@@ -219,7 +219,8 @@ def main() -> int:
     write_record(output, "probe_aborted", error=str(e), sent=sent)
     raise
   finally:
-    panda.set_safety_mode(CarParams.SafetyModel.noOutput)
+    passthrough_param = int(VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.PQ_UP_DIAG_PASSTHROUGH)
+    panda.set_safety_mode(CarParams.SafetyModel.volkswagenPq, passthrough_param)
     panda.send_heartbeat(engaged=False, engaged_mads=False)
     output.close()
 

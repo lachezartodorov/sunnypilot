@@ -185,6 +185,9 @@ class VolkswagenSafetyFlags(IntFlag):
   # Debug-only: permit a bounded, exact active ACC_System command requesting
   # zero acceleration on the e-Up. The production interface never sets this.
   PQ_UP_ZERO_ACCEL_PROBE = 4
+  # Debug-only handoff after direct probes: block all host TX while preserving
+  # camera/powertrain passthrough until the normal stack resumes.
+  PQ_UP_DIAG_PASSTHROUGH = 8
 
 
 class VolkswagenFlags(IntFlag):
