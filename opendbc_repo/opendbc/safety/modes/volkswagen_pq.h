@@ -15,6 +15,12 @@
 #define MSG_LDW_1               0x5BEU   // TX by OP, Lane line recognition and text alerts
 
 static bool volkswagen_pq_up = false;
+static bool volkswagen_pq_up_zero_accel_probe = false;
+static uint8_t volkswagen_pq_up_zero_accel_probe_count = 0U;
+static uint32_t volkswagen_pq_up_zero_accel_probe_start_ts = 0U;
+
+#define VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_MSGS 50U
+#define VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_US 1000000U
 
 static uint32_t volkswagen_pq_get_checksum(const CANPacket_t *msg) {
   return (uint32_t)msg->data[(msg->addr == MSG_MOTOR_5) ? 7 : 0];
@@ -90,9 +96,13 @@ static safety_config volkswagen_pq_init(uint16_t param) {
   volkswagen_common_init();
 
   volkswagen_pq_up = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP);
+  volkswagen_pq_up_zero_accel_probe = false;
+  volkswagen_pq_up_zero_accel_probe_count = 0U;
+  volkswagen_pq_up_zero_accel_probe_start_ts = 0U;
 
 #ifdef ALLOW_DEBUG
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
+  volkswagen_pq_up_zero_accel_probe = GET_FLAG(param, FLAG_VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE);
 #endif
   if (volkswagen_pq_up) {
     return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_pq_up_rx_checks, VOLKSWAGEN_PQ_UP_LONG_TX_MSGS) : \
@@ -232,7 +242,37 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
     // Signal: ACC_System.ACS_Sollbeschl (acceleration in m/s2, scale 0.005, offset -7.22)
     int desired_accel = ((((msg->data[4] & 0x7U) << 8) | msg->data[3]) * 5U) - 7220U;
 
-    if (longitudinal_accel_checks(desired_accel, VOLKSWAGEN_PQ_LONG_LIMITS)) {
+    bool accel_violation = longitudinal_accel_checks(desired_accel, VOLKSWAGEN_PQ_LONG_LIMITS);
+
+#ifdef ALLOW_DEBUG
+    // Bounded diagnostic exception for the e-Up longitudinal investigation.
+    // This is deliberately stricter than the normal acceleration check: only
+    // the exact active-state, zero-acceleration frame is accepted, with a
+    // valid XOR checksum and varying four-bit counter. Reinitializing the
+    // safety mode is required before another burst can be sent.
+    bool zero_accel_probe_cmd = volkswagen_pq_up && volkswagen_longitudinal &&
+                                volkswagen_pq_up_zero_accel_probe &&
+                                ((msg->data[1] & 0xF0U) == 0x30U) &&
+                                (msg->data[2] == 0x81U) && (msg->data[3] == 0xA4U) &&
+                                (msg->data[4] == 0x05U) && (msg->data[5] == 0x28U) &&
+                                (msg->data[6] == 0x96U) && (msg->data[7] == 0x00U) &&
+                                (msg->data[0] == volkswagen_pq_compute_checksum(msg));
+    if (accel_violation && zero_accel_probe_cmd) {
+      uint32_t now = microsecond_timer_get();
+      if (volkswagen_pq_up_zero_accel_probe_count == 0U) {
+        volkswagen_pq_up_zero_accel_probe_start_ts = now;
+      }
+      bool within_message_limit = volkswagen_pq_up_zero_accel_probe_count < VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_MSGS;
+      bool within_time_limit = safety_get_ts_elapsed(now, volkswagen_pq_up_zero_accel_probe_start_ts) <=
+                               VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_US;
+      if (volkswagen_pq_up_zero_accel_probe_count <= VOLKSWAGEN_PQ_UP_ZERO_ACCEL_PROBE_MAX_MSGS) {
+        volkswagen_pq_up_zero_accel_probe_count++;
+      }
+      accel_violation = !(within_message_limit && within_time_limit);
+    }
+#endif
+
+    if (accel_violation) {
       tx = false;
     }
   }

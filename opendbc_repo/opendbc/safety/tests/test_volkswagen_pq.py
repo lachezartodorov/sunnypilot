@@ -276,6 +276,59 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
     self._rx(self._motor_2_msg(cruise_engaged=True))
     self.assertFalse(self.safety.get_controls_allowed())
 
+  def _active_zero_accel_msg(self, **overrides):
+    values = {
+      "ACS_Sta_ADR": 3,
+      "ACS_StSt_Info": 1,
+      "ACS_Typ_ACC": 0,
+      "ACS_Anhaltewunsch": 0,
+      "ACS_FreigSollB": 1,
+      "ACS_Sollbeschl": 0.0,
+      "ACS_zul_Regelabw": 0.2,
+      "ACS_max_AendGrad": 3.0,
+      **overrides,
+    }
+    return self.packer.make_can_msg_safety("ACC_System", 0, values)
+
+  def _enable_zero_accel_probe(self):
+    param = VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.LONG_CONTROL | VolkswagenSafetyFlags.PQ_UP_ZERO_ACCEL_PROBE
+    self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
+    self.safety.init_tests()
+
+  def test_zero_accel_probe_requires_debug_flag(self):
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._active_zero_accel_msg()))
+
+  def test_zero_accel_probe_exact_frame_and_burst_limit(self):
+    self._enable_zero_accel_probe()
+    self.safety.set_controls_allowed(False)
+    for _ in range(50):
+      self.assertTrue(self._tx(self._active_zero_accel_msg()))
+    self.assertFalse(self._tx(self._active_zero_accel_msg()))
+
+  def test_zero_accel_probe_time_limit(self):
+    self._enable_zero_accel_probe()
+    self.safety.set_controls_allowed(False)
+    self.safety.set_timer(0)
+    self.assertTrue(self._tx(self._active_zero_accel_msg()))
+    self.safety.set_timer(1_000_001)
+    self.assertFalse(self._tx(self._active_zero_accel_msg()))
+
+  def test_zero_accel_probe_rejects_nearby_commands(self):
+    invalid_variants = (
+      {"ACS_Sta_ADR": 2},
+      {"ACS_StSt_Info": 0},
+      {"ACS_FreigSollB": 0},
+      {"ACS_Sollbeschl": 0.005},
+      {"ACS_zul_Regelabw": 0.205},
+      {"ACS_max_AendGrad": 3.02},
+    )
+    for overrides in invalid_variants:
+      with self.subTest(overrides=overrides):
+        self._enable_zero_accel_probe()
+        self.safety.set_controls_allowed(False)
+        self.assertFalse(self._tx(self._active_zero_accel_msg(**overrides)))
+
 
 if __name__ == "__main__":
   unittest.main()

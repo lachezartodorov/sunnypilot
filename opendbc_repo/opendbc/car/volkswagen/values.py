@@ -182,6 +182,9 @@ class WMI(StrEnum):
 class VolkswagenSafetyFlags(IntFlag):
   LONG_CONTROL = 1
   PQ_UP = 2
+  # Debug-only: permit a bounded, exact active ACC_System command requesting
+  # zero acceleration on the e-Up. The production interface never sets this.
+  PQ_UP_ZERO_ACCEL_PROBE = 4
 
 
 class VolkswagenFlags(IntFlag):
