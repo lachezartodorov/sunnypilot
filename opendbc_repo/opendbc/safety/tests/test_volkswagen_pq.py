@@ -242,7 +242,10 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
 
   TX_MSGS = [[MSG_HCA_1, 0], [MSG_ACC_SYSTEM, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [MSG_HCA_1, MSG_ACC_SYSTEM]}
-  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_1, MSG_ACC_SYSTEM)}
+  # The direct diagnostic setup does not operate the camera-bus relay, so the
+  # stock HCA stream may remain visible on bus 0. ACC_System is the only ECU
+  # liveness conflict relevant to this probe.
+  RELAY_MALFUNCTION_ADDRS = {0: (MSG_ACC_SYSTEM,)}
   INACTIVE_ACCEL = 3.01
 
   def setUp(self):

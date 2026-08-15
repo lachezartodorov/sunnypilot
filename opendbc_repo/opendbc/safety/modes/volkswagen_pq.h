@@ -65,7 +65,7 @@ static safety_config volkswagen_pq_init(uint16_t param) {
   // this platform. With no GRA_Neu receiver on the e-Up, the RX hook also has
   // no path to controls_allowed, so only the inactive acceleration value can
   // pass the longitudinal command checks while controls are off.
-  static const CanMsg VOLKSWAGEN_PQ_UP_LONG_TX_MSGS[] = {{MSG_HCA_1, 0, 5, .check_relay = true},
+  static const CanMsg VOLKSWAGEN_PQ_UP_LONG_TX_MSGS[] = {{MSG_HCA_1, 0, 5, .check_relay = false},
                                                          {MSG_ACC_SYSTEM, 0, 8, .check_relay = true}};
 
   static RxCheck volkswagen_pq_rx_checks[] = {

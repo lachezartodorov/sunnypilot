@@ -14,6 +14,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+
+# Make direct invocation work before importing another openpilot module.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+  sys.path.insert(0, str(REPO_ROOT))
+
 from openpilot.selfdrive.debug.car.vw_up_readonly_uds import ensure_agnos_python, running_openpilot_processes
 
 
