@@ -26,6 +26,9 @@ from openpilot.selfdrive.debug.car.vw_up_readonly_uds import ensure_agnos_python
 ACC_SYSTEM_ADDR = 0x368
 BREMSE_1_ADDR = 0x1A0
 BREMSE_5_ADDR = 0x4A8
+MOTOR_2_ADDR = 0x288
+MOTOR_3_ADDR = 0x380
+MOTOR_5_ADDR = 0x480
 BUS = 0
 SEND_HZ = 50
 MAX_DURATION = 3.0
@@ -40,8 +43,12 @@ class MonitorState:
   bremse_1_count: int = 0
   bremse_5_count: int = 0
   max_speed_kph: float = 0.0
+  latest_speed_kph: float | None = None
   latest_pressure_bar: float | None = None
   max_pressure_bar: float | None = None
+  latest_brake_pressed: bool | None = None
+  latest_gas_raw: int | None = None
+  latest_acc_main_on: bool | None = None
 
 
 def decode_bremse_1_speed_kph(data: bytes) -> float:
@@ -88,19 +95,29 @@ def write_record(output, event: str, **values) -> None:
 
 def process_rx(panda, output, state: MonitorState) -> None:
   for address, data, src in panda.can_recv():
-    if src != BUS or address not in (BREMSE_1_ADDR, BREMSE_5_ADDR):
+    if src != BUS or address not in (BREMSE_1_ADDR, BREMSE_5_ADDR, MOTOR_2_ADDR, MOTOR_3_ADDR, MOTOR_5_ADDR):
       continue
     if address == BREMSE_1_ADDR:
       speed_kph = decode_bremse_1_speed_kph(data)
       state.bremse_1_count += 1
+      state.latest_speed_kph = speed_kph
       state.max_speed_kph = max(state.max_speed_kph, speed_kph)
       write_record(output, "rx_bremse_1", speed_kph=speed_kph, value_hex=data.hex())
-    else:
+    elif address == BREMSE_5_ADDR:
       pressure_bar = decode_bremse_5_pressure_bar(data)
       state.bremse_5_count += 1
       state.latest_pressure_bar = pressure_bar
       state.max_pressure_bar = pressure_bar if state.max_pressure_bar is None else max(state.max_pressure_bar, pressure_bar)
       write_record(output, "rx_bremse_5", pressure_bar=pressure_bar, value_hex=data.hex())
+    elif address == MOTOR_2_ADDR:
+      state.latest_brake_pressed = bool(data[2] & 0x1)
+      write_record(output, "rx_motor_2", brake_pressed=state.latest_brake_pressed, value_hex=data.hex())
+    elif address == MOTOR_3_ADDR:
+      state.latest_gas_raw = data[2]
+      write_record(output, "rx_motor_3", gas_raw=state.latest_gas_raw, value_hex=data.hex())
+    else:
+      state.latest_acc_main_on = bool(data[6] & 0x4)
+      write_record(output, "rx_motor_5", acc_main_on=state.latest_acc_main_on, value_hex=data.hex())
 
 
 def assert_controls_off(health: dict) -> None:
