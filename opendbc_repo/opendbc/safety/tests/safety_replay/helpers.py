@@ -38,6 +38,8 @@ def is_steering_msg(mode, param, addr):
     ret = addr == 0x120
   elif mode == CarParams.SafetyModel.tesla:
     ret = addr == 0x488
+  elif mode == CarParams.SafetyModel.volkswagenPq:
+    ret = addr == 0xD2
   return ret
 
 
@@ -78,6 +80,10 @@ def get_steer_value(mode, param, msg):
     torque = ((msg.data[2] << 3) | (msg.data[3] >> 5)) - 1024
   elif mode == CarParams.SafetyModel.tesla:
     angle = (((msg.data[0] & 0x7F) << 8) | (msg.data[1])) - 16384  # ceil(1638.35/0.1)
+  elif mode == CarParams.SafetyModel.volkswagenPq:
+    torque = (msg.data[2] | ((msg.data[3] & 0x7F) << 8)) // 32
+    if msg.data[3] & 0x80:
+      torque *= -1
   return torque, angle
 
 
