@@ -190,6 +190,8 @@ class VolkswagenSafetyFlags(IntFlag):
   PQ_UP_DIAG_PASSTHROUGH = 8
   # Debug-only: permit a very short, exact -0.20 m/s2 ACC_System probe.
   PQ_UP_SMALL_DECEL_PROBE = 16
+  # Debug-only: permit a bounded, exact -3.0 m/s2 low-speed stop probe.
+  PQ_UP_HARD_STOP_PROBE = 32
 
 
 class VolkswagenFlags(IntFlag):

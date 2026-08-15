@@ -303,6 +303,14 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
     self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
     self.safety.init_tests()
 
+  def _active_hard_stop_msg(self, **overrides):
+    return self._active_zero_accel_msg(**{"ACS_Sollbeschl": -3.0, **overrides})
+
+  def _enable_hard_stop_probe(self):
+    param = VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.LONG_CONTROL | VolkswagenSafetyFlags.PQ_UP_HARD_STOP_PROBE
+    self.safety.set_safety_hooks(CarParams.SafetyModel.volkswagenPq, param)
+    self.safety.init_tests()
+
   def test_zero_accel_probe_requires_debug_flag(self):
     self.safety.set_controls_allowed(False)
     self.assertFalse(self._tx(self._active_zero_accel_msg()))
@@ -378,6 +386,43 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
         self._enable_small_decel_probe()
         self.safety.set_controls_allowed(False)
         self.assertFalse(self._tx(self._active_small_decel_msg(**overrides)))
+
+  def test_hard_stop_probe_exact_frame_and_burst_limit(self):
+    self._enable_hard_stop_probe()
+    self.safety.set_controls_allowed(False)
+    for _ in range(75):
+      self.assertTrue(self._tx(self._active_hard_stop_msg()))
+    self.assertFalse(self._tx(self._active_hard_stop_msg()))
+
+  def test_hard_stop_probe_time_limit(self):
+    self._enable_hard_stop_probe()
+    self.safety.set_controls_allowed(False)
+    self.safety.set_timer(0)
+    self.assertTrue(self._tx(self._active_hard_stop_msg()))
+    self.safety.set_timer(1_500_001)
+    self.assertFalse(self._tx(self._active_hard_stop_msg()))
+
+  def test_hard_stop_probe_rejects_nearby_commands(self):
+    invalid_variants = (
+      {"ACS_Sta_ADR": 2},
+      {"ACS_Sta_ADR": 3},
+      {"ACS_StSt_Info": 0},
+      {"ACS_FreigSollB": 0},
+      {"ACS_Sollbeschl": -2.995},
+      {"ACS_Sollbeschl": -3.005},
+      {"ACS_zul_Regelabw": 0.205},
+      {"ACS_max_AendGrad": 3.02},
+    )
+    for overrides in invalid_variants:
+      with self.subTest(overrides=overrides):
+        self._enable_hard_stop_probe()
+        self.safety.set_controls_allowed(False)
+        self.assertFalse(self._tx(self._active_hard_stop_msg(**overrides)))
+
+  def test_hard_stop_probe_rejects_other_accel_even_if_controls_allowed(self):
+    self._enable_hard_stop_probe()
+    self.safety.set_controls_allowed(True)
+    self.assertFalse(self._tx(self._active_hard_stop_msg(ACS_Sollbeschl=-2.0)))
 
 
 if __name__ == "__main__":
