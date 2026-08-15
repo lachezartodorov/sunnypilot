@@ -52,6 +52,7 @@ class ReadResult:
   name: str
   value_hex: str
   value_text: str | None
+  numeric_views: dict[str, int]
   known_ecu: str | None
 
 
@@ -100,6 +101,17 @@ def decode_text(data: bytes) -> str | None:
   return text if all(c.isprintable() for c in text) else None
 
 
+def numeric_views(data: bytes) -> dict[str, int]:
+  if len(data) not in (1, 2, 4, 8):
+    return {}
+  return {
+    "unsigned_be": int.from_bytes(data, "big", signed=False),
+    "signed_be": int.from_bytes(data, "big", signed=True),
+    "unsigned_le": int.from_bytes(data, "little", signed=False),
+    "signed_le": int.from_bytes(data, "little", signed=True),
+  }
+
+
 def normalize_part_number(value: str | None) -> str | None:
   if value is None:
     return None
@@ -144,6 +156,7 @@ def build_result(tx_addr: int, rx_addr: int, bus: int, did: int, data: bytes) ->
     name=IDENTIFICATION_DIDS.get(did, "unknown"),
     value_hex=data.hex(),
     value_text=value_text,
+    numeric_views=numeric_views(data),
     known_ecu=identify_known_ecu(did, value_text),
   )
 
@@ -154,6 +167,66 @@ def emit(result: ReadResult, output_file) -> None:
   if output_file is not None:
     output_file.write(line + "\n")
     output_file.flush()
+
+
+def emit_discovery_attempt(output_file, tx_addr: int, rx_addr: int, bus: int, did: int,
+                           status: str, result: ReadResult | None = None, negative_code: int | None = None) -> None:
+  record = {
+    "event": "did_attempt",
+    "monotonic_time": time.monotonic(),
+    "tx_address": f"0x{tx_addr:X}",
+    "rx_address": f"0x{rx_addr:X}",
+    "bus": bus,
+    "did": f"0x{did:04X}",
+    "status": status,
+    "negative_code": negative_code,
+    "result": asdict(result) if result is not None else None,
+  }
+  output_file.write(json.dumps(record, sort_keys=True) + "\n")
+  output_file.flush()
+
+
+def load_attempted_dids(path: Path) -> set[int]:
+  attempted = set()
+  if not path.is_file():
+    return attempted
+  for line in path.read_text(encoding="utf-8").splitlines():
+    try:
+      record = json.loads(line)
+      if record.get("event") == "did_attempt":
+        attempted.add(int(record["did"], 0))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+      continue
+  return attempted
+
+
+def parse_did_range(value: str) -> tuple[int, int]:
+  try:
+    start_text, end_text = value.split(":", 1)
+    start, end = parse_int(start_text), parse_int(end_text)
+  except (ValueError, TypeError) as e:
+    raise argparse.ArgumentTypeError("range must be START:END, for example 0x0200:0x03ff") from e
+  if start > end:
+    raise argparse.ArgumentTypeError("range START must not exceed END")
+  try:
+    validate_did(start)
+    validate_did(end)
+  except ValueError as e:
+    raise argparse.ArgumentTypeError(str(e)) from e
+  return start, end
+
+
+DISCOVERY_PRESETS = {
+  # Known public e-Up EBKV DIDs plus bounded neighborhoods. These are deliberately
+  # narrow because VW vendor-specific measurement DIDs are not contiguous globally.
+  "ebkv-known": ((0x028D, 0x028D), (0x4E06, 0x4E06)),
+  "ebkv-nearby": ((0x0200, 0x03FF), (0x4D80, 0x4E80)),
+  "abs-nearby": ((0x1700, 0x19FF),),
+}
+
+
+def expand_did_ranges(ranges: list[tuple[int, int]]) -> list[int]:
+  return sorted({did for start, end in ranges for did in range(start, end + 1)})
 
 
 def read_did(panda, tx_addr: int, rx_offset: int, bus: int, did: int, timeout: float) -> ReadResult:
@@ -197,6 +270,14 @@ def parse_args() -> argparse.Namespace:
   add_common_args(read)
   read.add_argument("address", type=parse_int)
   read.add_argument("did", type=parse_int, nargs="+")
+
+  discover = subparsers.add_parser("discover", help="bounded, resumable DID discovery on one ECU")
+  add_common_args(discover)
+  discover.add_argument("address", type=parse_int)
+  discover.add_argument("--preset", action="append", choices=tuple(DISCOVERY_PRESETS), default=[])
+  discover.add_argument("--range", dest="did_ranges", action="append", type=parse_did_range, default=[],
+                        help="inclusive DID range START:END; may be repeated")
+  discover.add_argument("--no-resume", action="store_true", help="repeat DIDs already recorded in --output")
   return parser.parse_args()
 
 
@@ -217,6 +298,7 @@ def main() -> int:
       f"Detected:\n  {details}"
     )
 
+  discovery_mode = args.command == "discover"
   if args.command == "scan":
     if args.start > args.end:
       raise SystemExit("--start must not be greater than --end")
@@ -225,6 +307,20 @@ def main() -> int:
   elif args.command == "identify":
     addresses = (args.address,)
     dids = tuple(IDENTIFICATION_DIDS)
+  elif discovery_mode:
+    if args.output is None:
+      raise SystemExit("discover requires --output so the scan can be resumed and audited")
+    ranges = list(args.did_ranges)
+    for preset in args.preset:
+      ranges.extend(DISCOVERY_PRESETS[preset])
+    if not ranges:
+      raise SystemExit("discover requires at least one --preset or --range")
+    dids = expand_did_ranges(ranges)
+    if len(dids) > 2048:
+      raise SystemExit("refusing to scan more than 2048 unique DIDs in one invocation")
+    if not args.no_resume:
+      dids = [did for did in dids if did not in load_attempted_dids(args.output)]
+    addresses = (args.address,)
   else:
     addresses = (args.address,)
     dids = tuple(args.did)
@@ -248,16 +344,35 @@ def main() -> int:
     # ISO-15765 diagnostic CAN address ranges; this program further limits the
     # payload to UDS ReadDataByIdentifier inside read_did().
     panda.set_safety_mode(CarParams.SafetyModel.elm327, 0)
+    if discovery_mode:
+      estimated_seconds = len(dids) * (args.timeout + args.interval)
+      print(f"Discovering {len(dids)} DIDs; conservative upper estimate {estimated_seconds / 60:.1f} minutes",
+            file=sys.stderr, flush=True)
     for address_index, address in enumerate(addresses):
       if args.command == "scan" and address_index % 16 == 0:
         print(f"Scanning 0x{address:X} ({address_index + 1}/{len(addresses)})", file=sys.stderr, flush=True)
-      for did in dids:
+      for did_index, did in enumerate(dids):
         try:
           result = read_did(panda, address, args.rx_offset, args.bus, did, args.timeout)
-        except (MessageTimeoutError, NegativeResponseError):
-          pass
+        except MessageTimeoutError:
+          if discovery_mode:
+            assert output_file is not None
+            emit_discovery_attempt(output_file, address, validate_address(address, args.rx_offset), args.bus, did, "timeout")
+        except NegativeResponseError as e:
+          if discovery_mode:
+            assert output_file is not None
+            emit_discovery_attempt(output_file, address, validate_address(address, args.rx_offset), args.bus, did,
+                                   "negative", negative_code=e.error_code)
         else:
-          emit(result, output_file)
+          if discovery_mode:
+            assert output_file is not None
+            emit_discovery_attempt(output_file, address, validate_address(address, args.rx_offset), args.bus, did,
+                                   "positive", result=result)
+            print(json.dumps(asdict(result), sort_keys=True), flush=True)
+          else:
+            emit(result, output_file)
+        if discovery_mode and (did_index + 1) % 64 == 0:
+          print(f"DID progress: {did_index + 1}/{len(dids)}", file=sys.stderr, flush=True)
         time.sleep(args.interval)
   finally:
     # Never leave broad diagnostic transmit safety selected after the tool exits.

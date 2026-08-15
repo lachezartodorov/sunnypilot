@@ -3,8 +3,12 @@ import pytest
 from openpilot.selfdrive.debug.car.vw_up_readonly_uds import (
   build_result,
   decode_text,
+  expand_did_ranges,
   identify_known_ecu,
+  load_attempted_dids,
   normalize_part_number,
+  numeric_views,
+  parse_did_range,
   validate_address,
   validate_did,
 )
@@ -34,6 +38,28 @@ def test_ascii_decoding_and_normalization():
   assert decode_text(b"\x00\xff ") is None
   assert decode_text(b"\x80") is None
   assert normalize_part_number("12e 909 059 a") == "12E909059A"
+
+
+def test_numeric_views():
+  assert numeric_views(b"\x01\x00") == {
+    "unsigned_be": 256,
+    "signed_be": 256,
+    "unsigned_le": 1,
+    "signed_le": 1,
+  }
+  assert numeric_views(b"abc") == {}
+
+
+def test_did_ranges_and_resume(tmp_path):
+  assert parse_did_range("0x028d:0x028f") == (0x028D, 0x028F)
+  assert expand_did_ranges([(3, 5), (1, 3)]) == [1, 2, 3, 4, 5]
+  output = tmp_path / "discovery.jsonl"
+  output.write_text(
+    '{"event":"did_attempt","did":"0x028D"}\n'
+    '{"event":"something_else","did":"0x028E"}\n'
+    'not-json\n'
+  )
+  assert load_attempted_dids(output) == {0x028D}
 
 
 @pytest.mark.parametrize("part,expected", [
