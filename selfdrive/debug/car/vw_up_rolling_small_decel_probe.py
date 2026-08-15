@@ -20,11 +20,11 @@ from openpilot.selfdrive.debug.car.vw_up_inactive_acc_probe import (
   write_record,
 )
 from openpilot.selfdrive.debug.car.vw_up_readonly_uds import ensure_agnos_python, running_openpilot_processes
-from openpilot.selfdrive.debug.car.vw_up_small_decel_probe import build_active_small_decel_acc_system
+from openpilot.selfdrive.debug.car.vw_up_small_decel_probe import MAX_DURATION, build_active_small_decel_acc_system
 
 
 SEND_HZ = 50
-PROBE_DURATION = 0.1
+DEFAULT_PROBE_DURATION = 0.1
 POST_MONITOR_SECONDS = 0.5
 ARM_TIMEOUT_SECONDS = 60.0
 READY_SECONDS = 0.5
@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--safe-area-confirmed", action="store_true", required=True)
   parser.add_argument("--driver-ready-confirmed", action="store_true", required=True)
   parser.add_argument("--rolling-small-decel-confirmed", action="store_true", required=True)
+  parser.add_argument("--duration", type=float, default=DEFAULT_PROBE_DURATION)
   parser.add_argument("--output", type=Path, required=True)
   return parser.parse_args()
 
@@ -53,6 +54,8 @@ def ready_to_trigger(state: MonitorState) -> bool:
 def main() -> int:
   ensure_agnos_python()
   args = parse_args()
+  if args.duration <= 0 or args.duration > MAX_DURATION:
+    raise SystemExit(f"--duration must be greater than zero and no more than {MAX_DURATION:.1f} seconds")
   active = running_openpilot_processes()
   if active:
     details = "\n  ".join(active)
@@ -81,8 +84,9 @@ def main() -> int:
       raise RuntimeError(f"Panda did not enter expected safety mode/param: {health}")
     initial_tx_blocked = health["safety_tx_blocked"]
     write_record(output, "probe_armed", trigger_speed_kph=[MIN_TRIGGER_SPEED_KPH, MAX_TRIGGER_SPEED_KPH],
-                 duration=PROBE_DURATION, safety_health=health, can_health=panda.can_health(BUS))
-    print(json.dumps({"status": "armed", "speed_window_kph": [MIN_TRIGGER_SPEED_KPH, MAX_TRIGGER_SPEED_KPH]}), flush=True)
+                 duration=args.duration, safety_health=health, can_health=panda.can_health(BUS))
+    print(json.dumps({"status": "armed", "speed_window_kph": [MIN_TRIGGER_SPEED_KPH, MAX_TRIGGER_SPEED_KPH],
+                      "duration": args.duration}), flush=True)
 
     arm_deadline = time.monotonic() + ARM_TIMEOUT_SECONDS
     ready_since = None
@@ -124,7 +128,7 @@ def main() -> int:
 
     start = time.monotonic()
     next_send = start
-    while time.monotonic() - start < PROBE_DURATION:
+    while time.monotonic() - start < args.duration:
       now = time.monotonic()
       process_rx(panda, output, state)
       if state.latest_speed_kph is None or state.latest_speed_kph > MAX_ABORT_SPEED_KPH:
