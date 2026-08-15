@@ -36,7 +36,7 @@ def test_ascii_decoding_and_normalization():
   assert normalize_part_number("12e 909 059 a") == "12E909059A"
 
 
-@pytest.mark.parametrize((part, expected), [
+@pytest.mark.parametrize("part,expected", [
   ("12E 909 059 A", "J539 brake booster (Bosch EBKV)"),
   ("12E614517F", "J104 ABS/ESC (TRW EBC 460 ESP)"),
   ("unknown", None),

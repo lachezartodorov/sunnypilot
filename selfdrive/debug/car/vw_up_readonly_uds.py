@@ -21,6 +21,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
+AGNOS_PYTHON = Path("/usr/local/venv/bin/python")
 
 MIN_QUERY_INTERVAL = 0.2  # Never send more than five requests per second.
 MIN_DIAG_ADDR = 0x700
@@ -56,6 +57,19 @@ class ReadResult:
 
 def parse_int(value: str) -> int:
   return int(value, 0)
+
+
+def ensure_agnos_python() -> None:
+  """Re-exec with openpilot's dependency environment on AGNOS."""
+  if not AGNOS_PYTHON.is_file() or Path(sys.executable).resolve() == AGNOS_PYTHON.resolve():
+    return
+  try:
+    import numpy  # noqa: F401
+  except ModuleNotFoundError:
+    env = os.environ.copy()
+    current_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(REPO_ROOT) if not current_pythonpath else f"{REPO_ROOT}:{current_pythonpath}"
+    os.execve(AGNOS_PYTHON, [str(AGNOS_PYTHON), *sys.argv], env)
 
 
 def validate_address(tx_addr: int, rx_offset: int) -> int:
@@ -187,6 +201,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+  ensure_agnos_python()
   args = parse_args()
   if args.interval < MIN_QUERY_INTERVAL:
     raise SystemExit(f"--interval must be at least {MIN_QUERY_INTERVAL:.1f} seconds")
