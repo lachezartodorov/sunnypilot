@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Auto-triggered, bounded -3.0 m/s2 low-speed stop probe for VW e-Up."""
+"""Auto-triggered, bounded Follow-to-Stop -3.0 m/s2 probe for VW e-Up."""
 
 import argparse
 import json
@@ -35,7 +35,7 @@ STOP_SPEED_KPH = 0.5
 MIN_STOP_DETECTION_SECONDS = 0.15
 MAX_RELEASED_PRESSURE_BAR = 1.0
 MAX_PRESSURE_BAR = 80.0
-EXPECTED_COUNTER_ZERO_DATA = bytes.fromhex("6010814c03289600")
+EXPECTED_COUNTER_ZERO_DATA = bytes.fromhex("2810894c43289600")
 
 
 def build_active_hard_stop_acc_system(packer=None):
@@ -44,8 +44,8 @@ def build_active_hard_stop_acc_system(packer=None):
 
   packer = CANPacker("vw_pq") if packer is None else packer
   messages = pqcan.create_acc_accel_control(
-    packer, BUS, acc_type=0, acc_enabled=True, accel=-3.0, acc_control=1,
-    stopping=False, starting=False, esp_hold=False,
+    packer, BUS, acc_type=1, acc_enabled=True, accel=-3.0, acc_control=1,
+    stopping=True, starting=False, esp_hold=False,
   )
   if len(messages) != 1:
     raise RuntimeError(f"expected one ACC_System message, got {len(messages)}")

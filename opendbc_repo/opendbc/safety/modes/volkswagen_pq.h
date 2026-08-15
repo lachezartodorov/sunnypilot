@@ -318,12 +318,13 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
     }
 
     // Deliberately isolated low-speed hard-stop probe. Only the exact active
-    // -3.0 m/s2 command is accepted, for at most 75 frames or 1.5 seconds.
+    // Follow-to-Stop -3.0 m/s2 command with a stop request is accepted, for
+    // at most 75 frames or 1.5 seconds.
     bool hard_stop_probe_cmd = volkswagen_pq_up && volkswagen_longitudinal &&
                                volkswagen_pq_up_hard_stop_probe &&
                                ((msg->data[1] & 0xF0U) == 0x10U) &&
-                               (msg->data[2] == 0x81U) && (msg->data[3] == 0x4CU) &&
-                               (msg->data[4] == 0x03U) && (msg->data[5] == 0x28U) &&
+                               (msg->data[2] == 0x89U) && (msg->data[3] == 0x4CU) &&
+                               (msg->data[4] == 0x43U) && (msg->data[5] == 0x28U) &&
                                (msg->data[6] == 0x96U) && (msg->data[7] == 0x00U) &&
                                (msg->data[0] == volkswagen_pq_compute_checksum(msg));
     if (volkswagen_pq_up_hard_stop_probe) {

@@ -304,7 +304,12 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
     self.safety.init_tests()
 
   def _active_hard_stop_msg(self, **overrides):
-    return self._active_zero_accel_msg(**{"ACS_Sollbeschl": -3.0, **overrides})
+    return self._active_zero_accel_msg(**{
+      "ACS_Typ_ACC": 1,
+      "ACS_Anhaltewunsch": 1,
+      "ACS_Sollbeschl": -3.0,
+      **overrides,
+    })
 
   def _enable_hard_stop_probe(self):
     param = VolkswagenSafetyFlags.PQ_UP | VolkswagenSafetyFlags.LONG_CONTROL | VolkswagenSafetyFlags.PQ_UP_HARD_STOP_PROBE
@@ -408,6 +413,8 @@ class TestVolkswagenPqUpLongSafety(TestVolkswagenPqUpSafety, common.Longitudinal
       {"ACS_Sta_ADR": 3},
       {"ACS_StSt_Info": 0},
       {"ACS_FreigSollB": 0},
+      {"ACS_Typ_ACC": 0},
+      {"ACS_Anhaltewunsch": 0},
       {"ACS_Sollbeschl": -2.995},
       {"ACS_Sollbeschl": -3.005},
       {"ACS_zul_Regelabw": 0.205},
